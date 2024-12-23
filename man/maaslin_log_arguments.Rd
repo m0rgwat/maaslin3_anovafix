@@ -47,6 +47,7 @@ maaslin_log_arguments(input_data,
                     max_pngs = 30,
                     cores = 1,
                     save_models = FALSE,
+                    save_plots_rds = FALSE,
                     verbosity = 'FINEST',
                     summary_plot_balanced = FALSE)
 }
@@ -185,6 +186,7 @@ maaslin_log_arguments(input_data,
     cores will likely be faster only for large datasets or complex models.}
     \item{save_models}{Whether to return the fit models and save them to an
     RData file.}
+    \item{save_plots_rds}{Whether to return the plots to an RDS file.}
     \item{verbosity}{The level of verbosity for the \code{logging} package.}
     \item{summary_plot_balanced}{If set to TRUE the summary plot will 
     show the top N features of each variable included in 

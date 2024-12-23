@@ -472,7 +472,8 @@ maaslin3_summary_plot <-
             heatmap_vars = NULL,
             median_comparison_abundance = FALSE,
             median_comparison_prevalence = FALSE,
-            balanced=FALSE) {
+            balanced = FALSE,
+            save_plots_rds = FALSE) {
         ret_plots <- list()
         if (first_n > 200) {
             logging::logerror(
@@ -734,11 +735,11 @@ maaslin3_summary_plot <-
                     invokeRestart("muffleWarning")
                 })
             })
-            saveRDS(final_plot,
-                    file = paste(figures_folder,
-                                 "/" ,
-                                 "summary_plot_gg.RDS",
-                                 sep = ""))
+            if (save_plots_rds) {
+                saveRDS(final_plot,
+                        file = paste(figures_folder,
+                            "/" , "summary_plot_gg.RDS", sep = ""))
+            }
         }
         return(ret_plots)
     }
@@ -754,6 +755,9 @@ make_scatterplot <- function(joined_features_metadata_abun,
                             N_nonzero,
                             N_total,
                             results_value) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
+
     temp_plot <-
         ggplot2::ggplot(data = joined_features_metadata_abun,
                         ggplot2::aes(
@@ -855,6 +859,9 @@ make_boxplot_lm <- function(joined_features_metadata_abun,
                             N_nonzero,
                             N_total,
                             results_value) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
+    
     temp_plot <-
         ggplot2::ggplot(data = joined_features_metadata_abun,
                         ggplot2::aes(.data$metadata, 
@@ -949,6 +956,8 @@ make_lm_plot <- function(this_signif_association,
                         transformation,
                         feature_specific_covariate_name,
                         feature_specific_covariate) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
 
     coef_val <-
         this_signif_association[
@@ -1068,6 +1077,9 @@ make_boxplot_logistic <- function(joined_features_metadata_prev,
                                 N_nonzero,
                                 N_total,
                                 results_value) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
+    
     temp_plot <-
         ggplot2::ggplot(data = joined_features_metadata_prev,
                         ggplot2::aes(.data$feature_abun, 
@@ -1149,6 +1161,9 @@ make_tile_plot <- function(joined_features_metadata_prev,
                         N_nonzero,
                         N_total,
                         results_value) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
+    
     count_df <- joined_features_metadata_prev %>%
         dplyr::group_by(.data$feature_abun, .data$metadata) %>%
         dplyr::summarise(count = dplyr::n(), .groups = 'drop')
@@ -1251,6 +1266,9 @@ make_logistic_plot <- function(this_signif_association,
                             transformation,
                             feature_specific_covariate_name,
                             feature_specific_covariate) {
+    match.arg(normalization, c('Total sum scaling', 'Center log ratio', 'None'))
+    match.arg(transformation, c('Log base 2', 'Pseudo-log base 2', 'None'))
+    
     coef_val <-
         this_signif_association[
             this_signif_association$model == 'logistic',]$coef
@@ -1392,7 +1410,12 @@ maaslin3_association_plots <-
             transform,
             feature_specific_covariate = NULL,
             feature_specific_covariate_name = NULL,
-            feature_specific_covariate_record = NULL) {
+            feature_specific_covariate_record = NULL,
+            save_plots_rds = FALSE) {
+        
+        
+        match.arg(normalization, c("TSS", "CLR", "NONE"))
+        match.arg(transform, c("LOG", "PLOG", "NONE"))
         
         # Disregard abundance-induced-prevalence errors in plotting
         merged_results$error[grepl("Prevalence association possibly induced", 
@@ -1503,62 +1526,56 @@ maaslin3_association_plots <-
         }
         
         # Save all plots
-        for (metadata_variable in names(saved_plots)) {
-          saveRDS(saved_plots[[metadata_variable]],
-                  file = paste(association_plots_folder,
-                               "/" ,
-                               metadata_variable,
-                               "_gg_associations.RDS",
-                               sep = ""))
-            for (feature in names(saved_plots[[metadata_variable]])) {
-                for (model_name in names(
-                    saved_plots[[metadata_variable]][[feature]])) {
-                    this_plot <-
-                        saved_plots[[metadata_variable]][[
-                            feature]][[model_name]]
+        vapply(names(saved_plots), function(metadata_variable) {
+            # Save RDS file for each metadata_variable
+            if (save_plots_rds) {
+                saveRDS(saved_plots[[metadata_variable]], 
+                        file = file.path(association_plots_folder, 
+                                        paste0(metadata_variable, 
+                                        "_gg_associations.RDS")))
+            }
+            
+            # Iterate over each feature in the metadata_variable
+            vapply(names(saved_plots[[metadata_variable]]), function(feature) {
+                # Iterate over each model_name for the feature
+                vapply(names(saved_plots[[metadata_variable]][[feature]]), 
+                    function(model_name) {
+                    this_plot <- saved_plots[[metadata_variable]][[
+                        feature]][[model_name]]
                     
-                    association_plots_sub_folder <-
-                        file.path(association_plots_folder,
-                                metadata_variable,
-                                model_name)
+                    # Create the subfolder for the plot
+                    association_plots_sub_folder <- file.path(
+                        association_plots_folder, metadata_variable, model_name)
                     if (!file.exists(association_plots_sub_folder)) {
-                        dir.create(association_plots_sub_folder,
-                                recursive = TRUE)
+                        dir.create(association_plots_sub_folder, 
+                                    recursive = TRUE)
                     }
                     
-                    png_file <-
-                        file.path(
-                            association_plots_sub_folder,
-                            paste0(
-                                metadata_variable,
-                                '_',
-                                feature,
-                                "_",
-                                model_name,
-                                ".png"
-                            )
-                        )
-                    height <-
-                        max(960, 18 * max(nchar(unlist(
-                            strsplit(this_plot$labels$y, '\n')
-                        ))))
+                    # Define the file path for saving the plot
+                    png_file <- file.path(association_plots_sub_folder, 
+                                            paste0(metadata_variable, '_', 
+                                            feature, "_", model_name, ".png"))
+                    
+                    # Calculate height based on plot labels
+                    height <- max(960, 18 * max(nchar(unlist(strsplit(
+                        this_plot$labels$y, '\n')))))
+                    
+                    # Try saving the plot
                     tryCatch({
                         withCallingHandlers({
-                            ggplot2::ggsave(
-                                filename = png_file,
-                                plot = this_plot,
-                                dpi = 600,
-                                width = 960 / 300,
-                                height = height / 300)
-                            },
-                            warning = function(w) {
-                                invokeRestart("muffleWarning")
-                            })
+                            ggplot2::ggsave(filename = png_file, 
+                                            plot = this_plot, 
+                                            dpi = 600, 
+                                            width = 960 / 300, 
+                                            height = height / 300)
+                        }, warning = function(w) { 
+                            invokeRestart("muffleWarning") })
                     })
-                    
-                }
-            }
-        }
-        
+                    return(0)
+                }, numeric(1))
+                return(0)
+            }, numeric(1))
+            return(0)
+        }, numeric(1))
         return(saved_plots)
     }

@@ -33,7 +33,8 @@ maaslin_plot_results(output,
                     heatmap_vars = NULL,
                     plot_associations = TRUE,
                     max_pngs = 30,
-                    balanced = FALSE)
+                    balanced = FALSE,
+                    save_plots_rds = FALSE)
 }
 \arguments{
     \item{output}{The output folder to write results.}
@@ -101,6 +102,7 @@ maaslin_plot_results(output,
     \code{coef_plot_vars} where N is equal to: 
     \code{ceiling(summary_plot_first_n/length(coef_plot_vars))}. Will error
     if \code{coef_plot_vars} = \code{NULL}}
+    \item{save_plots_rds}{Whether to return the plots to an RDS file.}
 }
 \value{
 Results will be written to the \code{figures} folder within the folder

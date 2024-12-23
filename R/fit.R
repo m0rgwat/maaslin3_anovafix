@@ -59,6 +59,7 @@ safe_deparse <- function(formula) {
 
 # Extract a predictor of the form: predictor_type(variable)
 extract_special_predictor <- function(formula, predictor_type) {
+    match.arg(predictor_type, c("group", "ordered", "strata"))
     groups <-
         regmatches(safe_deparse(formula), gregexpr(
             paste0(predictor_type, "\\((.*?)\\)"),
@@ -141,11 +142,9 @@ get_fixed_effects <-
                 names_to_include[names_to_include != "(Intercept)"]
         }
         
-        ordered_levels <- c()
-        for (ordered in ordereds) {
-            ordered_levels <- c(ordered_levels, 
-                                paste0(ordered, levels(dat_sub[[ordered]])[-1]))
-        }
+        ordered_levels <- unlist(lapply(ordereds, function(ordered) {
+            paste0(ordered, levels(dat_sub[[ordered]])[-1])
+        }))
         
         names_to_include <-
             c(names_to_include, groups, ordered_levels)
@@ -154,8 +153,7 @@ get_fixed_effects <-
 
 # Get non-baseline names for all non-numeric columns
 get_character_cols <- function(dat_sub) {
-    all_factors <- c()
-    for (col in colnames(dat_sub)) {
+    all_factors <- unlist(lapply(colnames(dat_sub), function(col) {
         if (!is.numeric(dat_sub[, col])) {
             if (is.factor(dat_sub[, col])) {
                 factor_levels <- levels(dat_sub[, col])
@@ -163,15 +161,18 @@ get_character_cols <- function(dat_sub) {
                 factor_levels <- levels(factor(dat_sub[, col]))
             }
             # All factor levels except baseline
-            all_factors <-
-                c(all_factors, paste0(col, unique(factor_levels[-1])))
+            return(unlist(paste0(col, unique(factor_levels[-1]))))
         }
-    }
+        return(character(0))
+    }))
+    
     return(all_factors)
 }
 
 # Correct over prevalence and abundance to get q-values
 add_qvals <- function(fit_data_abundance, fit_data_prevalence, correction) {
+    match.arg(correction, 
+        c("BH", "holm", "hochberg", "hommel", "bonferroni", "BY"))
     # Select out p-values and NA if errors
     if (!is.null(fit_data_abundance)) {
         abundance_pvals <- fit_data_abundance$results$pval
@@ -212,6 +213,8 @@ add_qvals <- function(fit_data_abundance, fit_data_prevalence, correction) {
 
 # Combine abundance and prevalence p-values
 create_combined_pval <- function(merged_signif, correction) {
+    match.arg(correction,
+            c("BH", "holm", "hochberg", "hommel", "bonferroni", "BY"))
     # Create a combined p-value
     merged_signif$pval_joint <-
         pbeta(pmin(merged_signif[, "linear"],
@@ -279,6 +282,8 @@ add_joint_signif <-
             new_fit_data_abundance,
             max_significance,
             correction) {
+        match.arg(correction,
+            c("BH", "holm", "hochberg", "hommel", "bonferroni", "BY"))
         # Subset to shared columns
         fit_data_prevalence_signif <-
             fit_data_prevalence$results[, c("feature", "metadata", "value",
@@ -951,6 +956,7 @@ check_for_zero_one_obs <- function(formula,
                                     x,
                                     model,
                                     feature_specific_covariate_name) {
+    match.arg(model, c("linear", "logistic"))
     if (length(unique(dat_sub$expr)) < 2) {
         output <- list()
         
@@ -1002,10 +1008,11 @@ check_missing_first_factor_level <- function(formula,
                                             x,
                                             feature_specific_covariate_name) {
     missing_first_factor_level <- FALSE
-    for (col in colnames(dat_sub)) {
+    missing_first_factor_level <- any(c(vapply(colnames(dat_sub), 
+                                                function(col) {
         if (is.factor(dat_sub[, col])) {
             if (all(is.na(dat_sub$expr[dat_sub[, col] == 
-                                    levels(dat_sub[, col])[1]]))) {
+                                        levels(dat_sub[, col])[1]]))) {
                 fixed_effects <-
                     get_fixed_effects(formula,
                                     random_effects_formula,
@@ -1014,11 +1021,12 @@ check_missing_first_factor_level <- function(formula,
                                     ordereds,
                                     feature_specific_covariate_name)
                 if (col %in% substr(fixed_effects, 1, nchar(col))) {
-                    missing_first_factor_level <- TRUE
+                    return(TRUE)
                 }
             }
         }
-    }
+        return(FALSE)
+    }, logical(1))))
     
     if (missing_first_factor_level) {
         output <- list()
@@ -1226,8 +1234,10 @@ run_group_models <- function(ranef_function,
                             dat_sub,
                             output,
                             mm_input) {
-    for (group in groups) {
-        output$para <- tryCatch({
+    match.arg(model, c("linear", "logistic"))
+    output$para <- rbind(output$para,
+                        setNames(do.call(rbind, lapply(groups, function(group) {
+        setNames(tryCatch({
             withCallingHandlers({
                 # Catch non-integer # successes first
                 if (is.null(random_effects_formula)) {
@@ -1296,12 +1306,12 @@ run_group_models <- function(ranef_function,
                     } else {
                         contrast_mat <- matrix(0, ncol = length(
                             lme4::fixef(fit)),
-                                nrow = length(levels(dat_sub[[group]])[-1])
-                            )
+                            nrow = length(levels(dat_sub[[group]])[-1])
+                        )
                         contrast_mat[seq_along(levels(
                             dat_sub[[group]])[-1]),
                             which(names(lme4::fixef(fit)) %in% paste0(
-                                    group, levels(dat_sub[[group]])[-1]))] <-
+                                group, levels(dat_sub[[group]])[-1]))] <-
                             diag(1, nrow = length(levels(dat_sub[[group]])[-1]))
                         
                         pval_new <- tryCatch({
@@ -1311,33 +1321,38 @@ run_group_models <- function(ranef_function,
                                 rhs = 
                                     rep(0, length(levels(
                                         dat_sub[[group]])[-1])))[['Pr(>F)']]
-                            },
-                            error = function(err) {
-                                NA
-                            })
+                        },
+                        error = function(err) {
+                            NA
+                        })
                     }
                 }
                 
-                tmp_output <-
-                    rbind(output$para,
-                        list(NA, NA, pval_new, group))
+                tmp_output <- list(NA, NA, pval_new, group)
+                tmp_output
             }, warning = function(w) {
-                if (w$message == 
-                    "non-integer #successes in a binomial glm!") {
-                    # Still worked
+                if (w$message == "non-integer #successes in a binomial glm!") {
                     invokeRestart("muffleWarning")
                 }
             })
-        },
-        warning = function(w) {
-            rbind(output$para, list(NA, NA, NA, group))
-        },
-        error = function(err) {
-            rbind(output$para, list(NA, NA, NA, group))
-        })
-        rownames(output$para) <-
-            c(rownames(output$para)[-nrow(output$para)], group)
-    }
+        }, warning = function(w) {
+            return(list(NA, NA, NA, group))
+        }, error = function(err) {
+            return(list(NA, NA, NA, group))
+        }), names(output$para))
+    })), names(output$para)))
+    
+    tmp_rownames <- rownames(output$para)
+    
+    output$para <- data.frame(lapply(output$para, function(x) {
+        if (is.list(x)) unlist(x) else x
+    }), check.names = FALSE)
+    
+    rownames(output$para) <- tmp_rownames
+    
+    rownames(output$para) <- c(rownames(output$para)[
+        -seq((nrow(output$para) - length(groups) + 1), nrow(output$para))], 
+        groups)
     return(output)
 }
 
@@ -1354,9 +1369,12 @@ run_ordered_models <- function(ranef_function,
                             weight_scheme,
                             dat_sub,
                             output) {
-    for (ordered in ordereds) {
+    match.arg(model, c("linear", "logistic"))
+    output$para <- rbind(output$para,
+                        setNames(do.call(rbind, lapply(ordereds, 
+                            function(ordered) {
         ordered_levels <- paste0(ordered, levels(dat_sub[[ordered]])[-1])
-        output$para <- tryCatch({
+        setNames(tryCatch({
             withCallingHandlers({
                 # Catch non-integer # successes first
                 if (is.null(random_effects_formula)) {
@@ -1382,57 +1400,36 @@ run_ordered_models <- function(ranef_function,
                         contrast_mat[i + 1, cols_to_add_1s[i]] <- -1
                     }
                     
-                    pvals_new <- c()
-                    coefs_new <- c()
-                    sigmas_new <- c()
-                    for (row_num in seq(nrow(contrast_mat))) {
-                        contrast_vec <- t(matrix(contrast_mat[row_num,]))
-                        pvals_new <-
-                            c(pvals_new, tryCatch({
-                                summary(multcomp::glht(
-                                    fit,
-                                    linfct = contrast_vec,
-                                    rhs = 0,
-                                    coef. = function(x) {
-                                        coef(x, complete = FALSE)
-                                    }
-                                    )
-                                )$test$pvalues
-                            },
-                            error = function(err) {
-                                NA
-                            }))
-                        coefs_new <-
-                            c(coefs_new, tryCatch({
-                                summary(multcomp::glht(
-                                    fit,
-                                    linfct = contrast_vec,
-                                    rhs = 0,
-                                    coef. = function(x) {
-                                        coef(x, complete = FALSE)
-                                    }
-                                    )
-                                )$test$coefficients
-                            },
-                            error = function(err) {
-                                NA
-                            }))
-                        sigmas_new <-
-                            c(sigmas_new, tryCatch({
-                                summary(multcomp::glht(
-                                    fit,
-                                    linfct = contrast_vec,
-                                    rhs = 0,
-                                    coef. = function(x) {
-                                        coef(x, complete = FALSE)
-                                    }
-                                    )
-                                )$test$sigma
-                            },
-                            error = function(err) {
-                                NA
-                            }))
-                    }
+                    pvals_new <- vapply(seq(nrow(contrast_mat)), 
+                                        function(row_num) {
+                        contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                        tryCatch({
+                            summary(multcomp::glht(fit, linfct = contrast_vec, 
+                rhs = 0, 
+                coef. = function(x) { coef(x, complete = FALSE) }))$test$pvalues
+                        }, error = function(err) { NA })
+                    }, numeric(1))
+                    
+                    coefs_new <- vapply(seq(nrow(contrast_mat)), 
+                                        function(row_num) {
+                        contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                        tryCatch({
+                            summary(multcomp::glht(fit, linfct = contrast_vec, 
+                rhs = 0, 
+                coef. = function(x) { 
+                    coef(x, complete = FALSE) }))$test$coefficients
+                        }, error = function(err) { NA })
+                    }, numeric(1))
+                    
+                    sigmas_new <- vapply(seq(nrow(contrast_mat)), 
+                                        function(row_num) {
+                        contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                        tryCatch({
+                            summary(multcomp::glht(fit, linfct = contrast_vec, 
+                rhs = 0, 
+                coef. = function(x) { coef(x, complete = FALSE) }))$test$sigma
+                        }, error = function(err) { NA })
+                    }, numeric(1))
                 } else {
                     # Random effects
                     if (any(!ordered_levels %in% names(lme4::fixef(fit)))) {
@@ -1443,7 +1440,7 @@ run_ordered_models <- function(ranef_function,
                     
                     contrast_mat <-
                         matrix(0, ncol = length(lme4::fixef(fit)),
-                            nrow = length(levels(dat_sub[[ordered]])[-1])
+                                nrow = length(levels(dat_sub[[ordered]])[-1])
                         )
                     
                     cols_to_add_1s <-
@@ -1455,108 +1452,77 @@ run_ordered_models <- function(ranef_function,
                     }
                     
                     if (model == "logistic") {
-                        pvals_new <- c()
-                        coefs_new <- c()
-                        sigmas_new <- c()
-                        for (row_num in seq(nrow(contrast_mat))) {
-                            contrast_vec <- t(matrix(contrast_mat[row_num,]))
-                            pvals_new <-
-                                c(pvals_new,
-                                tryCatch({
-                                    summary(multcomp::glht(
-                                            fit,
-                                            linfct = contrast_vec,
-                                            rhs = 0
-                                        )
-                                    )$test$pvalues
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                            coefs_new <-
-                                c(coefs_new,
-                                tryCatch({
-                                    summary(multcomp::glht(
-                                            fit,
-                                            linfct = contrast_vec,
-                                            rhs = 0
-                                        )
-                                    )$test$coefficients
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                            sigmas_new <-
-                                c(sigmas_new,
-                                tryCatch({
-                                    summary(multcomp::glht(
-                                        fit,
-                                        linfct = contrast_vec,
-                                        rhs = 0
-                                        )
-                                    )$test$sigma
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                        }
+        pvals_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    summary(multcomp::glht(fit, linfct = contrast_vec, 
+                                        rhs = 0, 
+                                        coef. = function(x) { coef(x, 
+                                        complete = FALSE) }))$test$pvalues
+                }, error = function(err) { NA })
+            }, numeric(1))
+                        
+        coefs_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    summary(multcomp::glht(fit, linfct = contrast_vec, 
+                                        rhs = 0, 
+                                        coef. = function(x) { 
+                                        coef(x, 
+                                        complete = FALSE) }))$test$coefficients
+                }, error = function(err) { NA })
+            }, numeric(1))
+                        
+        sigmas_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    summary(multcomp::glht(fit, linfct = contrast_vec, 
+                    rhs = 0, 
+                    coef. = function(x) { 
+                    coef(x, complete = FALSE) }))$test$sigma
+                }, error = function(err) { NA })
+            }, numeric(1))
                     } else {
-                        pvals_new <- c()
-                        coefs_new <- c()
-                        sigmas_new <- c()
-                        for (row_num in seq(nrow(contrast_mat))) {
-                            contrast_vec <- t(matrix(contrast_mat[row_num,]))
-                            pvals_new <-
-                                c(pvals_new,
-                                tryCatch({
-                                    lmerTest::contest(fit,
-                                                        matrix(
-                                                            contrast_vec,
-                                                            TRUE
-                                                        ), rhs = 0)[['Pr(>F)']]
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                            coefs_new <-
-                                c(coefs_new,
-                                tryCatch({
-                                    contrast_vec %*% lme4::fixef(fit)
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                            sigmas_new <-
-                                c(sigmas_new,
-                                tryCatch({
-                                    sqrt((
-                                        contrast_vec %*% 
-                                            vcov(fit) %*% 
-                                            t(contrast_vec)
-                                    )[1, 1])
-                                },
-                                error = function(err) {
-                                    NA
-                                }))
-                        }
-                    }
+        pvals_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    lmerTest::contest(fit,
+                                        matrix(
+                                        contrast_vec,
+                                        TRUE
+                                        ), rhs = 0)[['Pr(>F)']]
+                }, error = function(err) { NA })
+            }, numeric(1))
+        
+        coefs_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    contrast_vec %*% lme4::fixef(fit)
+                }, error = function(err) { NA })
+            }, numeric(1))
+        
+        sigmas_new <- vapply(seq(nrow(contrast_mat)), 
+            function(row_num) {
+                contrast_vec <- t(matrix(contrast_mat[row_num, ]))
+                tryCatch({
+                    sqrt((contrast_vec %*% vcov(fit) %*% t(contrast_vec))[1, 1])
+                }, error = function(err) { NA })
+            }, numeric(1))
+            }
                 }
                 
                 tmp_output <-
-                    rbind(
-                        output$para,
-                        list(
-                            coefs_new,
-                            sigmas_new,
-                            pvals_new,
-                            ordered_levels
+                    data.frame(coefs_new,
+                        sigmas_new,
+                        pvals_new,
+                        ordered_levels
                         )
-                    )
-                rownames(tmp_output)[
-                    (nrow(tmp_output) - 
-                        length(ordered_levels) + 1):
-                        nrow(tmp_output)] <-
-                    ordered_levels
+                rownames(tmp_output) <- ordered_levels
                 tmp_output
             }, warning = function(w) {
                 if (w$message == 
@@ -1565,34 +1531,28 @@ run_ordered_models <- function(ranef_function,
                     invokeRestart("muffleWarning")
                 }
             })
-        },
-        warning = function(w) {
-            org_row_num <- nrow(output$para)
-            output$para[
-                (org_row_num + 1):(org_row_num + length(ordered_levels)), 
-                seq(3)] <- NA
-            output$para[
-                (org_row_num + 1):(org_row_num + length(ordered_levels)), 
-                4] <- ordered_levels
-            rownames(output$para)[
-                (org_row_num + 1):(org_row_num + length(ordered_levels))] <-
+        }, warning = function(w) {
+            tmp_output <- data.frame(matrix(nrow = length(ordered_levels),
+                                            ncol = 4))
+            tmp_output[seq(1,length(ordered_levels)), seq(3)] <- NA
+            tmp_output[seq(1,length(ordered_levels)), 4] <- ordered_levels
+            rownames(tmp_output)[seq(1,length(ordered_levels))] <-
                 ordered_levels
-            output$para
-        },
-        error = function(err) {
-            org_row_num <- nrow(output$para)
-            output$para[
-                (org_row_num + 1):(org_row_num + length(ordered_levels)), 
-                seq(3)] <- NA
-            output$para[
-                (org_row_num + 1):(org_row_num + length(ordered_levels)), 
-                4] <- ordered_levels
-            rownames(output$para)[
-                (org_row_num + 1):(org_row_num + length(ordered_levels))] <-
+            
+            return(tmp_output)
+        }, error = function(err) {
+            tmp_output <- data.frame(matrix(nrow = length(ordered_levels),
+                                            ncol = 4))
+            tmp_output[seq(1,length(ordered_levels)), seq(3)] <- NA
+            tmp_output[seq(1,length(ordered_levels)), 4] <- ordered_levels
+            rownames(tmp_output)[seq(1,length(ordered_levels))] <-
                 ordered_levels
-            output$para
-        })
-    }
+            
+            return(tmp_output)
+        }), names(output$para))
+    })),
+    names(output$para)))
+    
     return(output)
 }
 
@@ -1698,6 +1658,7 @@ run_median_comparison_ordered <- function(paras_sub,
                                         pvals_new,
                                         cur_median,
                                         model) {
+    match.arg(model, c("linear", "logistic"))
     
     ordered <- ordereds[which(startsWith(
         metadata_variable, ordereds))]
@@ -1714,225 +1675,215 @@ run_median_comparison_ordered <- function(paras_sub,
     
     # MC for covariance
     nsims <- 10000
-    sim_medians <- vector(length = nsims)
-    all_sims <- matrix(ncol = n_coefs, nrow = nsims)
-    for (j in seq(nsims)) {
+    
+    sim_results <- replicate(nsims, {
         sim_coefs <- rnorm(n_coefs, coefs, sigmas)
-        sim_medians[j] <- median(sim_coefs[use_this_coef])
-        all_sims[j,] <- sim_coefs
-    }
-    cov_adjust <- apply(all_sims, 2, function(x){cov(x, sim_medians)})
+        sim_median <- median(sim_coefs[use_this_coef])
+        c(sim_median, sim_coefs)
+    })
+    
+    sim_medians <- sim_results[1, ]
+    all_sims <- sim_results[-1, , drop = FALSE]
+    cov_adjust <- apply(all_sims, 1, function(x){cov(x, sim_medians)})
     
     # Necessary offsets for contrast testing
     offsets_to_test <- abs(cur_median - coefs) * 
         sqrt((sigmas^2) / (sigmas^2+ sd_median^2 - 2 * cov_adjust)) + coefs
     
-    for (row_index in seq(nrow(paras_sub))) {
-        feature <- paras_sub$feature[row_index]
-        if (is.null(random_effects_formula)) {
-            # Fixed effects
-            cur_fit <- fits[[feature]]
-            
-            if (!metadata_variable %in% names(coef(cur_fit))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            if (any(!paste0(ordered, 
-                            levels(
-                                metadata[[ordered]])[-1]) %in% 
-                    names(coef(cur_fit)))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            mm_variable <-
-                model.matrix(cur_fit)[, metadata_variable]
-            if (any(!unique(
-                mm_variable[!is.na(mm_variable)]) %in% c(0, 1))) {
-                median_comparison_threshold_updated <-
-                    median_comparison_threshold / 
-                    sd(mm_variable)
-            } else {
-                median_comparison_threshold_updated <- 
-                    median_comparison_threshold
-            }
-            
-            if (is.na(coef(cur_fit, complete = FALSE)[
-                which(names(coef(
-                    cur_fit, complete = FALSE
-                )) == metadata_variable)])) {
-                pval_new_current <- NA
-            } else if (abs(coef(cur_fit, complete = FALSE)[
-                which(names(coef(
-                    cur_fit, complete = FALSE
-                )) == metadata_variable)] -
-                cur_median) < median_comparison_threshold_updated) {
-                pval_new_current <- 1
-            } else {
-                contrast_mat <-
-                    matrix(0,
-                        ncol = length(
-                            coef(cur_fit, complete = FALSE)),
-                        nrow = length(levels(
-                            metadata[[ordered]])[-1])
-                    )
+    pvals_new <- c(pvals_new,
+        vapply(seq(nrow(paras_sub)), function(row_index) {
+            feature <- paras_sub$feature[row_index]
+            if (is.null(random_effects_formula)) {
+                # Fixed effects
+                cur_fit <- fits[[feature]]
                 
-                cols_to_add_1s <-
-                    which(names(
-                        coef(cur_fit, complete = FALSE)
-                    ) %in% paste0(ordered, levels(
-                        metadata[[ordered]]
-                    )[-1]))
-                contrast_mat[1, cols_to_add_1s[1]] <- 1
-                for (i in seq_along(cols_to_add_1s[-1])) {
-                    contrast_mat[i + 1, cols_to_add_1s[-1][i]] <- 1
-                    contrast_mat[i + 1, cols_to_add_1s[i]] <- -1
+                if (!metadata_variable %in% names(coef(cur_fit))) {
+                    return(NA)
                 }
                 
-                contrast_vec <-
-                    t(matrix(contrast_mat[which(paste0(
-                        ordered, levels(
-                            metadata[[ordered]]
-                        )[-1]) == metadata_variable),]))
-                pval_new_current <-
-                    tryCatch({
-                        summary(
-                            multcomp::glht(
-                                cur_fit,
-                                linfct = contrast_vec,
-                                rhs = offsets_to_test[row_index],
-                                coef. = function(x) {
-                                    coef(x, complete = FALSE)
-                                }
-                            )
-                        )$test$pvalues
-                    },
-                    error = function(err) {
-                        NA
-                    })
-            }
-            
-            pvals_new <-
-                c(pvals_new, pval_new_current)
-        } else {
-            # Random effects
-            cur_fit <- fits[[feature]]
-            
-            if (!metadata_variable %in% 
-                names(lme4::fixef(cur_fit))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            if (any(!paste0(ordered, 
-                            levels(metadata[[
-                                ordered]])[-1]) %in% 
-                    names(lme4::fixef(cur_fit)))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            mm_variable <-
-                model.matrix(cur_fit)[, metadata_variable]
-            if (any(
-                !unique(mm_variable[!is.na(mm_variable)]) %in% 
-                c(0, 1))) {
-                median_comparison_threshold_updated <-
-                    median_comparison_threshold / 
-                    sd(mm_variable)
-            } else {
-                median_comparison_threshold_updated <- 
-                    median_comparison_threshold
-            }
-            
-            contrast_mat <-
-                matrix(
-                    0,
-                    ncol = length(lme4::fixef(cur_fit)),
-                    nrow = length(levels(
-                        metadata[[ordered]])[-1])
-                )
-            cols_to_add_1s <-
-                which(names(lme4::fixef(cur_fit)) %in% 
-                        paste0(ordered, levels(
-                            metadata[[ordered]])[-1]))
-            contrast_mat[1, cols_to_add_1s[1]] <- 1
-            for (i in seq_along(cols_to_add_1s[-1])) {
-                contrast_mat[i + 1, cols_to_add_1s[-1][i]] <- 1
-                contrast_mat[i + 1, cols_to_add_1s[i]] <-
-                    -1
-            }
-            contrast_vec <-
-                t(matrix(
-                    contrast_mat[
-                        which(paste0(
-                            ordered, levels(metadata[[
-                                ordered]])[-1]) == 
-                                metadata_variable),]))
-            
-            if (model == "logistic") {
-                if (is.na(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
+                if (any(!paste0(ordered, 
+                                levels(
+                                    metadata[[ordered]])[-1]) %in% 
+                        names(coef(cur_fit)))) {
+                    return(NA)
+                }
+                
+                mm_variable <-
+                    model.matrix(cur_fit)[, metadata_variable]
+                if (any(!unique(
+                    mm_variable[!is.na(mm_variable)]) %in% c(0, 1))) {
+                    median_comparison_threshold_updated <-
+                        median_comparison_threshold / 
+                        sd(mm_variable)
+                } else {
+                    median_comparison_threshold_updated <- 
+                        median_comparison_threshold
+                }
+                
+                if (is.na(coef(cur_fit, complete = FALSE)[
+                    which(names(coef(
+                        cur_fit, complete = FALSE
                     )) == metadata_variable)])) {
                     pval_new_current <- NA
-                } else if (abs(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
+                } else if (abs(coef(cur_fit, complete = FALSE)[
+                    which(names(coef(
+                        cur_fit, complete = FALSE
                     )) == metadata_variable)] -
-                    cur_median) < 
-                    median_comparison_threshold_updated) {
+                    cur_median) < median_comparison_threshold_updated) {
                     pval_new_current <- 1
                 } else {
+                    contrast_mat <-
+                        matrix(0, ncol = length(
+                            coef(cur_fit, complete = FALSE)),
+                            nrow = length(levels(metadata[[ordered]])[-1])
+                        )
+                    
+                    cols_to_add_1s <-
+                        which(names(coef(cur_fit, complete = FALSE)) %in% 
+                            paste0(ordered, levels(metadata[[ordered]])[-1]))
+                    contrast_mat[1, cols_to_add_1s[1]] <- 1
+                    for (i in seq_along(cols_to_add_1s[-1])) {
+                        contrast_mat[i + 1, cols_to_add_1s[-1][i]] <- 1
+                        contrast_mat[i + 1, cols_to_add_1s[i]] <- -1
+                    }
+                    
+                    contrast_vec <-
+                        t(matrix(contrast_mat[which(paste0(
+                            ordered, levels(
+                                metadata[[ordered]]
+                            )[-1]) == metadata_variable),]))
                     pval_new_current <-
                         tryCatch({
                             summary(
                                 multcomp::glht(
                                     cur_fit,
                                     linfct = contrast_vec,
-                                    rhs = offsets_to_test[row_index]
+                                    rhs = offsets_to_test[row_index],
+                                    coef. = function(x) {
+                                        coef(x, complete = FALSE)
+                                    }
                                 )
                             )$test$pvalues
                         },
                         error = function(err) {
                             NA
                         })
-                } 
-                pvals_new <-
-                    c(pvals_new, pval_new_current)
-            } else {
-                if (is.na(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
-                    )) == metadata_variable)])) {
-                    pval_new_current <- NA
-                } else if (abs(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
-                    )) == metadata_variable)] -
-                    cur_median) < 
-                    median_comparison_threshold_updated) {
-                    pval_new_current <- 1
-                } else {
-                    pval_new_current <-
-                        tryCatch({
-                            lmerTest::contest(cur_fit,
-                                            matrix(contrast_vec, 
-                                                    TRUE),
-                                            rhs = offsets_to_test[row_index])[[
-                                                'Pr(>F)']]
-                        },
-                        error = function(err) {
-                            NA
-                        })
                 }
                 
-                pvals_new <-
-                    c(pvals_new, pval_new_current)
+                return(pval_new_current)
+            } else {
+                # Random effects
+                cur_fit <- fits[[feature]]
+                
+                if (!metadata_variable %in% 
+                    names(lme4::fixef(cur_fit))) {
+                    NA
+                }
+                
+                if (any(!paste0(ordered, 
+                                levels(metadata[[
+                                    ordered]])[-1]) %in% 
+                        names(lme4::fixef(cur_fit)))) {
+                    NA
+                }
+                
+                mm_variable <-
+                    model.matrix(cur_fit)[, metadata_variable]
+                if (any(
+                    !unique(mm_variable[!is.na(mm_variable)]) %in% 
+                    c(0, 1))) {
+                    median_comparison_threshold_updated <-
+                        median_comparison_threshold / 
+                        sd(mm_variable)
+                } else {
+                    median_comparison_threshold_updated <- 
+                        median_comparison_threshold
+                }
+                
+                contrast_mat <-
+                    matrix(
+                        0,
+                        ncol = length(lme4::fixef(cur_fit)),
+                        nrow = length(levels(
+                            metadata[[ordered]])[-1])
+                    )
+                cols_to_add_1s <-
+                    which(names(lme4::fixef(cur_fit)) %in% 
+                        paste0(ordered, levels(
+                        metadata[[ordered]])[-1]))
+                contrast_mat[1, cols_to_add_1s[1]] <- 1
+                for (i in seq_along(cols_to_add_1s[-1])) {
+                    contrast_mat[i + 1, cols_to_add_1s[-1][i]] <- 1
+                    contrast_mat[i + 1, cols_to_add_1s[i]] <- -1
+                }
+                contrast_vec <-
+                    t(matrix(
+                        contrast_mat[
+                            which(paste0(
+                                ordered, levels(metadata[[
+                                    ordered]])[-1]) == 
+                                    metadata_variable),]))
+                
+                if (model == "logistic") {
+                    if (is.na(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)])) {
+                        pval_new_current <- NA
+                    } else if (abs(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)] -
+                        cur_median) < 
+                        median_comparison_threshold_updated) {
+                        pval_new_current <- 1
+                    } else {
+                        pval_new_current <-
+                            tryCatch({
+                                summary(
+                                    multcomp::glht(
+                                        cur_fit,
+                                        linfct = contrast_vec,
+                                        rhs = offsets_to_test[row_index]
+                                    )
+                                )$test$pvalues
+                            },
+                            error = function(err) {
+                                NA
+                            })
+                    } 
+                    return(pval_new_current)
+                } else {
+                    if (is.na(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)])) {
+                        pval_new_current <- NA
+                    } else if (abs(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)] -
+                        cur_median) < 
+                        median_comparison_threshold_updated) {
+                        pval_new_current <- 1
+                    } else {
+                        pval_new_current <-
+                            tryCatch({
+                                lmerTest::contest(cur_fit,
+                                            matrix(contrast_vec, TRUE),
+                                            rhs = offsets_to_test[row_index])[[
+                                                'Pr(>F)']]
+                            },
+                            error = function(err) {
+                                NA
+                            })
+                    }
+                    
+                    return(pval_new_current)
+                }
             }
-        }
-    }
+        }, numeric(1)))
+    
     return(pvals_new)
 }
 
@@ -1946,6 +1897,7 @@ run_median_comparison_general <- function(paras_sub,
                                         pvals_new,
                                         cur_median,
                                         model) {
+    match.arg(model, c("linear", "logistic"))
     use_this_coef <- !is.na(paras_sub$pval) & paras_sub$pval < 0.95
     
     n_coefs <- nrow(paras_sub)
@@ -1958,124 +1910,62 @@ run_median_comparison_general <- function(paras_sub,
 
     # MC for covariance
     nsims <- 10000
-    sim_medians <- vector(length = nsims)
-    all_sims <- matrix(ncol = n_coefs, nrow = nsims)
-    for (j in seq(nsims)) {
+    sim_results <- replicate(nsims, {
         sim_coefs <- rnorm(n_coefs, coefs, sigmas)
-        sim_medians[j] <- median(sim_coefs[use_this_coef])
-        all_sims[j,] <- sim_coefs
-    }
-    cov_adjust <- apply(all_sims, 2, function(x){cov(x, sim_medians)})
+        sim_median <- median(sim_coefs[use_this_coef])
+        c(sim_median, sim_coefs)
+    })
+    
+    sim_medians <- sim_results[1, ]
+    all_sims <- sim_results[-1, , drop = FALSE]
+    cov_adjust <- apply(all_sims, 1, function(x){cov(x, sim_medians)})
     
     # Necessary offsets for contrast testing
     offsets_to_test <- abs(cur_median - coefs) * 
         sqrt((sigmas^2) / (sigmas^2+ sd_median^2 - 2 * cov_adjust)) + coefs
     
-    for (row_index in seq(nrow(paras_sub))) {
-        feature <- paras_sub$feature[row_index]
-        if (is.null(random_effects_formula)) {
-            # Fixed effects
-            cur_fit <- fits[[feature]]
-            
-            if (!metadata_variable %in% names(coef(cur_fit))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            mm_variable <-
-                model.matrix(cur_fit)[, metadata_variable]
-            if (any(
-                !unique(mm_variable[!is.na(mm_variable)]) %in% 
-                c(0, 1))) {
-                median_comparison_threshold_updated <-
-                    median_comparison_threshold / 
-                    sd(mm_variable)
-            } else {
-                median_comparison_threshold_updated <- 
-                    median_comparison_threshold
-            }
-            
-            contrast_vec <-
-                rep(0, length(coef(
+    pvals_new <- c(pvals_new,
+        vapply(seq(nrow(paras_sub)), function(row_index) {
+            feature <- paras_sub$feature[row_index]
+            if (is.null(random_effects_formula)) {
+                # Fixed effects
+                cur_fit <- fits[[feature]]
+                
+                if (!metadata_variable %in% names(coef(cur_fit))) {
+                    return(NA)
+                }
+                
+                mm_variable <-
+                    model.matrix(cur_fit)[, metadata_variable]
+                if (any(
+                    !unique(mm_variable[!is.na(mm_variable)]) %in% 
+                    c(0, 1))) {
+                    median_comparison_threshold_updated <-
+                        median_comparison_threshold / 
+                        sd(mm_variable)
+                } else {
+                    median_comparison_threshold_updated <- 
+                        median_comparison_threshold
+                }
+                
+                contrast_vec <-
+                    rep(0, length(coef(
+                        cur_fit, complete = FALSE
+                    )))
+                contrast_vec[which(names(coef(
                     cur_fit, complete = FALSE
-                )))
-            contrast_vec[which(names(coef(
-                cur_fit, complete = FALSE
-            )) == metadata_variable)] <- 1
-            
-            if (is.na(coef(cur_fit, complete = FALSE)[
-                which(names(coef(
-                    cur_fit, complete = FALSE
-                )) == metadata_variable)])) {
-                pval_new_current <- NA
-            } else if (abs(coef(cur_fit, complete = FALSE)[
-                which(names(coef(
-                    cur_fit, complete = FALSE
-                )) == metadata_variable)] -
-                cur_median) < median_comparison_threshold_updated) {
-                pval_new_current <- 1
-            } else {
-                pval_new_current <-
-                    tryCatch({
-                        summary(
-                            multcomp::glht(
-                                cur_fit,
-                                linfct = matrix(contrast_vec, 
-                                                TRUE),
-                                rhs = offsets_to_test[row_index],
-                                coef. = function(x) {
-                                    coef(x, complete = FALSE)
-                                }
-                            )
-                        )$test$pvalues[1]
-                    },
-                    error = function(err) {
-                        NA
-                    })
-            }
-            
-            pvals_new <-
-                c(pvals_new, pval_new_current)
-        } else {
-            # Random effects
-            cur_fit <- fits[[feature]]
-            
-            if (!metadata_variable %in% 
-                names(lme4::fixef(cur_fit))) {
-                pvals_new <- c(pvals_new, NA)
-                next
-            }
-            
-            mm_variable <-
-                model.matrix(cur_fit)[, metadata_variable]
-            if (any(!unique(
-                mm_variable[!is.na(mm_variable)]) %in% 
-                c(0, 1))) {
-                median_comparison_threshold_updated <-
-                    median_comparison_threshold / 
-                    sd(mm_variable)
-            } else {
-                median_comparison_threshold_updated <- 
-                    median_comparison_threshold
-            }
-            
-            contrast_vec <-
-                rep(0, length(lme4::fixef(cur_fit)))
-            contrast_vec[which(names(lme4::fixef(cur_fit)) == 
-                                metadata_variable)] <- 1
-            
-            if (model == "logistic") {
-                if (is.na(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
+                )) == metadata_variable)] <- 1
+                
+                if (is.na(coef(cur_fit, complete = FALSE)[
+                    which(names(coef(
+                        cur_fit, complete = FALSE
                     )) == metadata_variable)])) {
                     pval_new_current <- NA
-                } else if (abs(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
+                } else if (abs(coef(cur_fit, complete = FALSE)[
+                    which(names(coef(
+                        cur_fit, complete = FALSE
                     )) == metadata_variable)] -
-                    cur_median) < 
-                    median_comparison_threshold_updated) {
+                    cur_median) < median_comparison_threshold_updated) {
                     pval_new_current <- 1
                 } else {
                     pval_new_current <-
@@ -2083,9 +1973,12 @@ run_median_comparison_general <- function(paras_sub,
                             summary(
                                 multcomp::glht(
                                     cur_fit,
-                                    linfct = matrix(
-                                        contrast_vec, TRUE),
-                                    rhs = offsets_to_test[row_index]
+                                    linfct = matrix(contrast_vec, 
+                                                    TRUE),
+                                    rhs = offsets_to_test[row_index],
+                                    coef. = function(x) {
+                                        coef(x, complete = FALSE)
+                                    }
                                 )
                             )$test$pvalues[1]
                         },
@@ -2094,39 +1987,95 @@ run_median_comparison_general <- function(paras_sub,
                         })
                 }
                 
-                pvals_new <-
-                    c(pvals_new, pval_new_current)
+                return(pval_new_current)
             } else {
-                if (is.na(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
-                    )) == metadata_variable)])) {
-                    pval_new_current <- NA
-                } else if (abs(lme4::fixef(cur_fit)[
-                    which(names(lme4::fixef(
-                        cur_fit
-                    )) == metadata_variable)] -
-                    cur_median) < 
-                    median_comparison_threshold_updated) {
-                    pval_new_current <- 1
-                } else {
-                    pval_new_current <-
-                        tryCatch({
-                            lmerTest::contest(
-                                cur_fit,
-                                matrix(contrast_vec, TRUE),
-                                rhs = offsets_to_test[row_index])[['Pr(>F)']]
-                        },
-                        error = function(err) {
-                            NA
-                        })
+                # Random effects
+                cur_fit <- fits[[feature]]
+                
+                if (!metadata_variable %in% 
+                    names(lme4::fixef(cur_fit))) {
+                    return(NA)
                 }
                 
-                pvals_new <-
-                    c(pvals_new, pval_new_current)
+                mm_variable <-
+                    model.matrix(cur_fit)[, metadata_variable]
+                if (any(!unique(
+                    mm_variable[!is.na(mm_variable)]) %in% 
+                    c(0, 1))) {
+                    median_comparison_threshold_updated <-
+                        median_comparison_threshold / 
+                        sd(mm_variable)
+                } else {
+                    median_comparison_threshold_updated <- 
+                        median_comparison_threshold
+                }
+                
+                contrast_vec <- rep(0, length(lme4::fixef(cur_fit)))
+                contrast_vec[which(names(lme4::fixef(cur_fit)) == 
+                            metadata_variable)] <- 1
+                
+                if (model == "logistic") {
+                    if (is.na(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)])) {
+                        pval_new_current <- NA
+                    } else if (abs(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)] -
+                        cur_median) < 
+                        median_comparison_threshold_updated) {
+                        pval_new_current <- 1
+                    } else {
+                        pval_new_current <-
+                            tryCatch({
+                                summary(
+                                    multcomp::glht(
+                                        cur_fit,
+                                        linfct = matrix(
+                                            contrast_vec, TRUE),
+                                        rhs = offsets_to_test[row_index]
+                                    )
+                                )$test$pvalues[1]
+                            },
+                            error = function(err) {
+                                NA
+                            })
+                    }
+                    
+                    return(pval_new_current)
+                } else {
+                    if (is.na(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)])) {
+                        pval_new_current <- NA
+                    } else if (abs(lme4::fixef(cur_fit)[
+                        which(names(lme4::fixef(
+                            cur_fit
+                        )) == metadata_variable)] -
+                        cur_median) < 
+                        median_comparison_threshold_updated) {
+                        pval_new_current <- 1
+                    } else {
+                        pval_new_current <-
+                            tryCatch({
+                                lmerTest::contest(
+                                    cur_fit,
+                                    matrix(contrast_vec, TRUE),
+                                    rhs = 
+                                    offsets_to_test[row_index])[['Pr(>F)']]
+                            },
+                            error = function(err) {
+                                NA
+                            })
+                    }
+                    
+                    return(pval_new_current)
+                }
             }
-        }
-    }
+        }, numeric(1)))
     return(pvals_new)
 }
 
@@ -2140,15 +2089,13 @@ run_median_comparison <- function(paras,
                                 median_comparison_threshold,
                                 subtract_median,
                                 model) {
+    match.arg(model, c("linear", "logistic"))
     logging::loginfo("Performing tests against medians")
     
     if (length(ordereds) > 0) {
-        ordered_levels <- c()
-        for (ordered in ordereds) {
-            ordered_levels <-
-                c(ordered_levels, paste0(ordered, 
-                                        levels(metadata[[ordered]])[-1]))
-        }
+        ordered_levels <- unlist(lapply(ordereds, function(ordered) {
+            unlist(paste0(ordered, levels(metadata[[ordered]])[-1]))
+        }))
     } else {
         ordered_levels <- c()
     }
@@ -2157,14 +2104,22 @@ run_median_comparison <- function(paras,
         paras[!is.na(paras$error) | paras$name %in% groups,]
     paras <-
         paras[is.na(paras$error) & !paras$name %in% groups,]
-    for (metadata_variable in unique(paras$name)) {
-        paras_sub <- paras[paras$name == metadata_variable,]
+    
+    process_metadata_variable <- function(metadata_variable,
+                                        paras,
+                                        fits,
+                                        ordered_levels,
+                                        ordereds,
+                                        metadata,
+                                        random_effects_formula, 
+                                        median_comparison_threshold, 
+                                        subtract_median, 
+                                        model) {
         
-        # Get the current median, excluding coefficients with NA p-values or
-        # p-values close to 1 since these could be model misfits
-        cur_median <-
-            median(paras_sub$coef[!is.na(paras_sub$pval) &
-                                    paras_sub$pval < 0.95], na.rm = TRUE)
+        paras_sub <- paras[paras$name == metadata_variable, ]
+        cur_median <- median(paras_sub$coef[!is.na(paras_sub$pval) & 
+                                        paras_sub$pval < 0.95], na.rm = TRUE)
+        
         if (is.na(cur_median)) {
             pvals_new <- rep(NA, nrow(paras_sub))
             coefs_new <- paras_sub$coef
@@ -2175,44 +2130,63 @@ run_median_comparison <- function(paras,
             } else {
                 coefs_new <- paras_sub$coef
             }
+            
             if (metadata_variable %in% ordered_levels) {
                 pvals_new <- run_median_comparison_ordered(
-                    paras_sub,
-                    fits,
-                    ordereds,
-                    metadata,
-                    random_effects_formula,
-                    median_comparison_threshold,
-                    metadata_variable,
-                    pvals_new,
-                    cur_median,
-                    model)
+                    paras_sub, 
+                    fits, 
+                    ordereds, 
+                    metadata, 
+                    random_effects_formula, 
+                    median_comparison_threshold, 
+                    metadata_variable, 
+                    pvals_new, 
+                    cur_median, 
+                    model
+                )
             } else {
                 pvals_new <- run_median_comparison_general(
-                    paras_sub,
-                    fits,
-                    metadata,
-                    random_effects_formula,
-                    median_comparison_threshold,
-                    metadata_variable,
-                    pvals_new,
-                    cur_median,
-                    model)
+                    paras_sub, 
+                    fits, 
+                    metadata, 
+                    random_effects_formula, 
+                    median_comparison_threshold, 
+                    metadata_variable, 
+                    pvals_new, 
+                    cur_median, 
+                    model
+                )
             }
         }
         
-        paras_sub$error <-
-            ifelse(
-                is.na(pvals_new) & !is.na(paras_sub$pval),
-                "P-value became NA in median comparison, 
-                    try rerunning without the median comparison",
-                paras_sub$error
-            )
+        paras_sub$error <- ifelse(
+            is.na(pvals_new) & !is.na(paras_sub$pval), 
+            "P-value became NA in median comparison, 
+            try rerunning without the median comparison", 
+            paras_sub$error
+        )
+        
         paras_sub$pval <- pvals_new
         paras_sub$coef <- coefs_new
-        final_paras <- rbind(final_paras, paras_sub)
+        
+        return(paras_sub)
     }
     
+    final_paras_list <- lapply(unique(paras$name), function(metadata_variable) {
+        process_metadata_variable(metadata_variable,
+                                paras,
+                                fits,
+                                ordered_levels,
+                                ordereds,
+                                metadata,
+                                random_effects_formula,
+                                median_comparison_threshold,
+                                subtract_median,
+                                model)
+    })
+    
+    final_paras <- rbind(final_paras, do.call(rbind, final_paras_list))
+
     paras <- final_paras
     return(paras)
 }
@@ -2233,6 +2207,9 @@ fit.model <- function(features,
                     feature_specific_covariate = NULL,
                     feature_specific_covariate_name = NULL,
                     feature_specific_covariate_record = NULL) {
+    match.arg(model, c("linear", "logistic"))
+    match.arg(correction, 
+            c("BH", "holm", "hochberg", "hommel", "bonferroni", "BY"))
     check_formulas_valid(formula, random_effects_formula)
     formula <- formula(formula)
     

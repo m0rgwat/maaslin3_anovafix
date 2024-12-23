@@ -203,59 +203,45 @@ write_fits <- function(output,
         logging::loginfo("Creating fits folder")
         dir.create(fits_folder)
     }
+
+    model_types <- c('linear', 'logistic')
     
-    
-    for (model_type in c('linear', 'logistic')) {
-        if (model_type == 'linear') {
-            fit_data <- fit_data_abundance
+    lapply(model_types, function(model_type) {
+        fit_data <- if (model_type == 'linear') {
+            fit_data_abundance
         } else {
-            fit_data <- fit_data_prevalence
+            fit_data_prevalence
         }
         
-        if (is.null(fit_data)) {
-            next
-        }
+        if (is.null(fit_data)) return(NULL)
         
-        ################################
-        # Write out the raw model fits #
-        ################################
-        
+        # Write out the raw model fits
         if (save_models) {
-            model_file <-
-                file.path(fits_folder,
-                        paste0("models_", model_type, ".rds"))
-            # remove models file if already exists (since models append)
+            model_file <- file.path(fits_folder, 
+                                    paste0("models_", model_type, ".rds"))
             if (file.exists(model_file)) {
-                logging::logwarn("Deleting existing model objects file: %s",
-                                model_file)
+                logging::logwarn("Deleting existing model objects file: %s", 
+                                    model_file)
                 unlink(model_file)
             }
             logging::loginfo("Writing model objects to file %s", model_file)
             saveRDS(fit_data$fits, file = model_file)
         }
         
-        ###########################
-        # Write residuals to file #
-        ###########################
-        
-        residuals_file <-
-            file.path(fits_folder, paste0("residuals_", model_type, ".rds"))
-        # remove residuals file if already exists (since residuals append)
+        # Write residuals to file
+        residuals_file <- file.path(fits_folder, 
+                                    paste0("residuals_", model_type, ".rds"))
         if (file.exists(residuals_file)) {
-            logging::logwarn("Deleting existing residuals file: %s",
+            logging::logwarn("Deleting existing residuals file: %s", 
                             residuals_file)
             unlink(residuals_file)
         }
         logging::loginfo("Writing residuals to file %s", residuals_file)
         saveRDS(fit_data$residuals, file = residuals_file)
         
-        ###############################
-        # Write fitted values to file #
-        ###############################
-        
-        fitted_file <-
-            file.path(fits_folder, paste0("fitted_", model_type, ".rds"))
-        # remove fitted file if already exists (since fitted append)
+        # Write fitted values to file
+        fitted_file <- file.path(fits_folder, 
+                                paste0("fitted_", model_type, ".rds"))
         if (file.exists(fitted_file)) {
             logging::logwarn("Deleting existing fitted file: %s", fitted_file)
             unlink(fitted_file)
@@ -263,23 +249,19 @@ write_fits <- function(output,
         logging::loginfo("Writing fitted values to file %s", fitted_file)
         saveRDS(fit_data$fitted, file = fitted_file)
         
-        #########################################################
-        # Write extracted random effects to file (if specified) #
-        #########################################################
-        
+        # Write extracted random effects to file (if specified)
         if (!is.null(random_effects_formula)) {
-            ranef_file <-
-                file.path(fits_folder, paste0("ranef_", model_type, ".rds"))
-            # remove ranef file if already exists (since ranef append)
+            ranef_file <- file.path(fits_folder, 
+                                    paste0("ranef_", model_type, ".rds"))
             if (file.exists(ranef_file)) {
                 logging::logwarn("Deleting existing ranef file: %s", ranef_file)
                 unlink(ranef_file)
             }
-            logging::loginfo("Writing extracted random effects to file %s",
+            logging::loginfo("Writing extracted random effects to file %s", 
                             ranef_file)
             saveRDS(fit_data$ranef, file = ranef_file)
         }
-    }
+    })
 }
 
 write_results <- function(output,
@@ -362,32 +344,30 @@ write_results <- function(output,
 
 write_results_in_lefse_format <-
     function(results, output_file_name) {
-        lines_vec <- vector(length = nrow(results))
-        for (i in seq(nrow(results))) {
-            if (is.na(results[i, ]$error) &
+        lines_vec <- vapply(seq(nrow(results)), function(i) {
+            if (is.na(results[i, ]$error) & 
                 !is.na(results[i, ]$qval_individual)) {
                 if (results[i, ]$qval_individual < 0.1) {
-                    lines_vec[i] <- paste0(
+                    return(paste0(
                         c(
                             results[i, ]$feature,
                             results[i, ]$coef,
                             paste0(results[i, ]$metadata, '_', 
-                                results[i, ]$value),
+                                    results[i, ]$value),
                             results[i, ]$coef,
                             results[i, ]$pval_individual
                         ),
                         collapse = '\t'
-                    )
+                    ))
                 } else {
-                    lines_vec[i] <- paste0(c(results[i, ]$feature,
-                                            results[i, ]$coef,
-                                            "",
-                                            "",
-                                            "-"),
-                                        collapse = '\t')
+                    return(paste0(c(results[i, ]$feature, 
+                            results[i, ]$coef, "", "", "-"), collapse = '\t'))
                 }
+            } else {
+                # return NA for rows that don't meet the condition
+                return(NA_character_)
             }
-        }
+        }, FUN.VALUE = character(1))
         lines_vec <- lines_vec[lines_vec != 'FALSE']
         
         writeLines(sort(lines_vec), con = output_file_name)
@@ -449,25 +429,15 @@ maaslin_contrast_test <- function(fits,
         stop("Number of rows in contrast matrix must equal the length of rhs")
     }
     
-    pvals_new <- vector(length = length(fits) * nrow(contrast_mat))
-    coefs_new <- vector(length = length(fits) * nrow(contrast_mat))
-    sigmas_new <- vector(length = length(fits) * nrow(contrast_mat))
-    errors <- vector(length = length(fits) * nrow(contrast_mat))
-    
     # Run contrast test on each  model
-    for (fit_index in seq_along(fits)) {
-        fit <- fits[[fit_index]]
+    test_out_joined <- do.call(rbind, 
+        lapply(seq_along(fits), function(fit_index) {
+                fit <- fits[[fit_index]]
         if (!is(fit, 'lmerMod') & !is(fit, 'glmerMod') & !is(fit, "coxph")) {
             if (all(is.na(fit))) {
-                pvals_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                            ((fit_index) * nrow(contrast_mat))] <- NA
-                coefs_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                            ((fit_index) * nrow(contrast_mat))] <- NA
-                sigmas_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                            ((fit_index) * nrow(contrast_mat))] <- NA
-                errors[((fit_index - 1) * nrow(contrast_mat) + 1):
-                        ((fit_index) * nrow(contrast_mat))] <- "Fit is NA"
-                next
+                return(matrix(rep(c(NA, NA, NA, "Fit is NA"), 
+                            nrow(contrast_mat)),
+                            nrow = nrow(contrast_mat), byrow = TRUE))
             }
         }
         
@@ -481,126 +451,111 @@ maaslin_contrast_test <- function(fits,
         contrast_mat_tmp <- contrast_mat
         contrast_mat_tmp <- cbind(contrast_mat_tmp, 
                                 matrix(0, 
-                                        nrow = nrow(contrast_mat_tmp),
-                                        ncol = length(
-                                            setdiff(included_coefs,
-                                                    contrast_mat_cols))))
+                                    nrow = nrow(contrast_mat_tmp),
+                                    ncol = length(
+                                    setdiff(included_coefs,
+                                    contrast_mat_cols))))
         colnames(contrast_mat_tmp) <- c(contrast_mat_cols,
                                         setdiff(included_coefs,
                                                 contrast_mat_cols))
         if (any(contrast_mat_tmp[,setdiff(contrast_mat_cols, 
                                         included_coefs)] != 0)) {
-            pvals_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                        ((fit_index) * nrow(contrast_mat))] <- NA
-            coefs_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                        ((fit_index) * nrow(contrast_mat))] <- NA
-            sigmas_new[((fit_index - 1) * nrow(contrast_mat) + 1):
-                        ((fit_index) * nrow(contrast_mat))] <- NA
-            errors[((fit_index - 1) * nrow(contrast_mat) + 1):
-                    ((fit_index) * nrow(contrast_mat))] <- 
-                "Predictors not in the model had non-zero contrast values"
-            next
+            return(matrix(rep(c(NA, NA, NA, 
+                "Predictors not in the model had non-zero contrast values"), 
+                    nrow(contrast_mat)),
+                    nrow = nrow(contrast_mat), byrow = TRUE))
         }
         
         contrast_mat_tmp <- contrast_mat_tmp[,included_coefs, drop = FALSE]
         
         # Run contrast test
         if (!uses_random_effects | model == 'prevalence') {
-            for (row_num in seq(nrow(contrast_mat))) {
-                contrast_vec <- t(matrix(contrast_mat_tmp[row_num,]))
-                
-                error_message <- NA
-                calling_env <- environment()
-                test_out <- tryCatch({
-                    if (!uses_random_effects) {
-                        summary_out <- summary(multcomp::glht(
-                            fit,
-                            linfct = contrast_vec,
-                            rhs = rhs[row_num],
-                            coef. = function(x) {
-                                coef(x, complete = FALSE)
-                            }
-                        )
-                        )$test
-                    } else {
-                        summary_out <- summary(multcomp::glht(
-                            fit,
-                            linfct = contrast_vec,
-                            rhs = rhs[row_num],
-                        )
-                        )$test
-                    }
+            test_out_joined <- vapply(X = seq(nrow(contrast_mat)), 
+                FUN = function(row_num) {
+                    contrast_vec <- t(matrix(contrast_mat_tmp[row_num,]))
                     
-                    c(summary_out$pvalues,
-                    summary_out$coefficients,
-                    summary_out$sigma)
-                }, warning = function(w) {
-                    message(sprintf("Feature %s : %s", 
-                                    names(fit), w))
-                    
-                    assign("error_message",
-                        conditionMessage(w),
-                        envir = calling_env)
-                    invokeRestart("muffleWarning")
-                },
-                error = function(err) {
-                    assign("error_message", err$message, envir = calling_env)
-                    error_obj <- c(NA, NA, NA)
-                    return(error_obj)
-                })
-                pvals_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[1]
-                coefs_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[2]
-                sigmas_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[3] 
-                errors[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    error_message
-            }
+                    error_message <- NA
+                    calling_env <- environment()
+                    test_out <- tryCatch({
+                        if (!uses_random_effects) {
+                            summary_out <- summary(multcomp::glht(
+                                fit,
+                                linfct = contrast_vec,
+                                rhs = rhs[row_num],
+                                coef. = function(x) {
+                                    coef(x, complete = FALSE)
+                                }
+                            )
+                            )$test
+                        } else {
+                            summary_out <- summary(multcomp::glht(
+                                fit,
+                                linfct = contrast_vec,
+                                rhs = rhs[row_num],
+                            )
+                            )$test
+                        }
+                        
+                        c(summary_out$coefficients,
+                            summary_out$sigma,
+                            summary_out$pvalues)
+                    }, warning = function(w) {
+                        message(sprintf("Feature %s : %s", 
+                                        names(fit), w))
+                        
+                        assign("error_message",
+                                conditionMessage(w),
+                                envir = calling_env)
+                        invokeRestart("muffleWarning")
+                    },
+                    error = function(err) {
+                        assign("error_message", err$message, 
+                            envir = calling_env)
+                        error_obj <- c(NA, NA, NA)
+                        return(error_obj)
+                    })
+                    return(as.character(c(test_out, error_message)))
+                }, character(4))
         } else {
-            for (row_num in seq(nrow(contrast_mat))) {
-                contrast_vec <- t(matrix(contrast_mat_tmp[row_num,]))
-                
-                error_message <- NA
-                calling_env <- environment()
-                test_out <- tryCatch({
-                    pval <- lmerTest::contest(fit,
-                                            matrix(
-                                                contrast_vec,
-                                                TRUE
-                                            ), rhs = rhs[row_num])[['Pr(>F)']]
-                    coef <- contrast_vec %*% lme4::fixef(fit)
-                    sigma <- sqrt((contrast_vec %*% vcov(fit) %*% 
-                                    t(contrast_vec))[1, 1])
-                    c(pval,
-                    coef,
-                    sigma)
-                }, warning = function(w) {
-                    message(sprintf("Feature %s : %s", 
-                                    names(fit), w))
+            test_out_joined <- vapply(X = seq(nrow(contrast_mat)), 
+                FUN = function(row_num) {
+                    contrast_vec <- t(matrix(contrast_mat_tmp[row_num,]))
                     
-                    assign("error_message",
-                        conditionMessage(w),
-                        envir = calling_env)
-                    invokeRestart("muffleWarning")
-                },
-                error = function(err) {
-                    assign("error_message", err$message, envir = calling_env)
-                    error_obj <- c(NA, NA, NA)
-                    return(error_obj)
-                })
-                pvals_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[1]
-                coefs_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[2]
-                sigmas_new[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    test_out[3] 
-                errors[((fit_index - 1) * nrow(contrast_mat) + row_num)] <- 
-                    error_message
-            }
+                    error_message <- NA
+                    calling_env <- environment()
+                    test_out <- tryCatch({
+                        pval <- lmerTest::contest(fit,
+                            matrix(contrast_vec, TRUE), 
+                            rhs = rhs[row_num])[['Pr(>F)']]
+                        coef <- contrast_vec %*% lme4::fixef(fit)
+                        sigma <- sqrt((contrast_vec %*% vcov(fit) %*% 
+                                        t(contrast_vec))[1, 1])
+                        c(coef, sigma, pval)
+                    }, warning = function(w) {
+                        message(sprintf("Feature %s : %s", names(fit), w))
+                        
+                        assign("error_message",
+                                conditionMessage(w),
+                                envir = calling_env)
+                        invokeRestart("muffleWarning")
+                    },
+                    error = function(err) {
+                        assign("error_message", err$message,
+                            envir = calling_env)
+                        error_obj <- c(NA, NA, NA)
+                        return(error_obj)
+                    })
+                    return(as.character(c(test_out, error_message)))
+                }, character(4))
         }
-    }
+        return(t(test_out_joined))
+    }))
     
+    test_out_joined <- data.frame(test_out_joined)
+    colnames(test_out_joined) <- c("coefs_new", "sigmas_new", 
+        "pvals_new", "errors")
+    test_out_joined[, seq(3)] <- apply(test_out_joined[, seq(3)], 2, as.numeric)
+
     if (all(is.null(rownames(contrast_mat)))) {
         test_names <- seq(nrow(contrast_mat))
     } else {
@@ -611,29 +566,31 @@ maaslin_contrast_test <- function(fits,
     paras <- data.frame(
         feature = rep(names(fits), each = nrow(contrast_mat)),
         test = rep(test_names, length(fits)),
-        coef = coefs_new,
+        coef = test_out_joined$coefs_new,
         rhs = rep(rhs, length(fits)),
-        stderr = sigmas_new,
-        pval_individual = pvals_new,
-        error = errors,
+        stderr = test_out_joined$sigmas_new,
+        pval_individual = test_out_joined$pvals_new,
+        error = test_out_joined$errors,
         model = model
     )
     
     # Perform median comparison as though these were the original fits
     if (median_comparison) {
-        for (selected_test in unique(paras$test)) {
-            paras_sub <- paras[paras$test == selected_test & 
-                                !is.na(paras$coef) & 
-                                !is.na(paras$stderr), , drop = FALSE]
+        paras <- do.call(rbind, lapply(unique(paras$test), 
+                                        function(selected_test) {
+            paras_sub <- paras[paras$test == selected_test, , drop = FALSE]
+            paras_sub_out <- paras_sub[is.na(paras_sub$coef) | 
+                                        is.na(paras_sub$stderr), , drop = FALSE]
+            paras_sub <- paras_sub[!is.na(paras_sub$coef) & 
+                                    !is.na(paras_sub$stderr), , drop = FALSE]
             if (nrow(paras_sub) == 0) {
-                next
+                return(paras_sub_out)
             }
             
             # Make sure other p-values are set to NA to not confuse
             # median comparison with non-comparison
-            paras$pval_individual[paras$test == selected_test & 
-                                    is.na(paras$coef) | 
-                                    is.na(paras$stderr)] <- NA
+            paras_sub_out$pval_individual <- rep(NA, 
+                length(paras_sub_out$pval_individual))
             
             use_this_coef <- !is.na(paras_sub$pval_individual) & 
                 paras_sub$pval_individual < 0.95
@@ -647,31 +604,30 @@ maaslin_contrast_test <- function(fits,
             
             # Variance from asymptotic distribution
             sd_median <- sqrt(0.25 * 2 * base::pi * 
-                                sigma_sq_med / sum(use_this_coef))
+                            sigma_sq_med / sum(use_this_coef))
             
             # MC for covariance
             nsims <- 10000
-            sim_medians <- vector(length = nsims)
-            all_sims <- matrix(ncol = n_coefs, nrow = nsims)
-            for (j in seq(nsims)) {
+            
+            sim_results <- replicate(nsims, {
                 sim_coefs <- rnorm(n_coefs, coefs, sigmas)
-                sim_medians[j] <- median(sim_coefs[use_this_coef])
-                all_sims[j,] <- sim_coefs
-            }
-            cov_adjust <- apply(all_sims, 2, function(x){cov(x, sim_medians)})
+                sim_median <- median(sim_coefs[use_this_coef])
+                c(sim_median, sim_coefs)
+            })
+            
+            sim_medians <- sim_results[1, ]
+            all_sims <- sim_results[-1, , drop = FALSE]
+            cov_adjust <- apply(all_sims, 1, function(x){cov(x, sim_medians)})
             
             # Necessary offsets for contrast testing
             offsets_to_test <- abs(cur_median - coefs) * 
                 sqrt((sigmas^2) / (sigmas^2+ sd_median^2 - 2 * cov_adjust)) + 
                 coefs
             
-            pvals_new <- vector(length = nrow(paras_sub))
-            
-            # Run contrast test on each  model
-            for (row_index in seq(nrow(paras_sub))) {
+            pvals_new <- vapply(seq_len(nrow(paras_sub)), function(row_index) {
                 feature <- paras_sub$feature[row_index]
                 fit <- fits[[feature]]
-
+                
                 # Fill in contrast matrix gaps if necessary
                 if (uses_random_effects) {
                     included_coefs <- names(lme4::fixef(fit))
@@ -682,117 +638,71 @@ maaslin_contrast_test <- function(fits,
                 contrast_mat_tmp <- contrast_mat
                 contrast_mat_tmp <- cbind(contrast_mat_tmp, 
                                         matrix(0, 
-                                                nrow = nrow(contrast_mat_tmp),
-                                                ncol = length(
-                                                setdiff(included_coefs,
-                                                contrast_mat_cols))))
-                colnames(contrast_mat_tmp) <- c(contrast_mat_cols,
-                                                setdiff(included_coefs,
-                                                        contrast_mat_cols))
-
-                contrast_mat_tmp <- contrast_mat_tmp[,included_coefs, 
-                                                    drop = FALSE]
+                                        nrow = nrow(contrast_mat_tmp),
+                                        ncol = length(setdiff(
+                                        included_coefs, contrast_mat_cols))))
+                colnames(contrast_mat_tmp) <- 
+                    c(contrast_mat_cols, 
+                        setdiff(included_coefs, contrast_mat_cols))
+                
+                contrast_mat_tmp <- 
+                    contrast_mat_tmp[, included_coefs, drop = FALSE]
                 
                 # Run contrast test
-                if (!uses_random_effects | model == 'prevalence') {
-                    contrast_vec <- t(matrix(contrast_mat_tmp[selected_test,]))
+                contrast_vec <- t(matrix(contrast_mat_tmp[selected_test,]))
+                
+                error_message <- NA
+                calling_env <- environment()
+                test_out <- tryCatch({
+                    if (!uses_random_effects | model == 'prevalence') {
+                        summary_out <- summary(multcomp::glht(
+                            fit,
+                            linfct = contrast_vec,
+                            rhs = offsets_to_test[row_index],
+                            coef. = function(x) { coef(x, complete = FALSE) }
+                        ))$test
+                    } else {
+                        summary_out <- summary(multcomp::glht(
+                            fit,
+                            linfct = contrast_vec,
+                            rhs = offsets_to_test[row_index]
+                        ))$test
+                    }
                     
-                    error_message <- NA
-                    calling_env <- environment()
-                    test_out <- tryCatch({
-                        if (!uses_random_effects) {
-                            summary_out <- summary(multcomp::glht(
-                                fit,
-                                linfct = contrast_vec,
-                                rhs = offsets_to_test[row_index],
-                                coef. = function(x) {
-                                    coef(x, complete = FALSE)
-                                }
-                            )
-                            )$test
-                        } else {
-                            summary_out <- summary(multcomp::glht(
-                                fit,
-                                linfct = contrast_vec,
-                                rhs = offsets_to_test[row_index],
-                            )
-                            )$test
-                        }
-                        
-                        c(summary_out$pvalues,
-                            summary_out$coefficients,
-                            summary_out$sigma)
-                    }, warning = function(w) {
-                        message(sprintf("Feature %s : %s", 
-                                        names(fit), w))
-                        
-                        assign("error_message",
-                                conditionMessage(w),
-                                envir = calling_env)
-                        invokeRestart("muffleWarning")
-                    },
-                    error = function(err) {
-                        assign("error_message", err$message, 
-                                envir = calling_env)
-                        error_obj <- c(NA, NA, NA)
-                        return(error_obj)
-                    })
-                    pvals_new[row_index] <- 
-                        test_out[1]
-                } else {
-                    contrast_vec <- t(matrix(contrast_mat_tmp[selected_test,]))
+                    c(summary_out$pvalues, summary_out$coefficients, 
+                        summary_out$sigma)
+                }, warning = function(w) {
+                    message(sprintf("Feature %s : %s", names(fit), w))
                     
-                    error_message <- NA
-                    calling_env <- environment()
-                    test_out <- tryCatch({
-                        pval <- lmerTest::contest(fit,
-                                                    matrix(
-                                                        contrast_vec,
-                                                        TRUE
-                                                    ), 
-                                rhs = offsets_to_test[row_index])[['Pr(>F)']]
-                        coef <- contrast_vec %*% lme4::fixef(fit)
-                        sigma <- sqrt((contrast_vec %*% vcov(fit) %*% 
-                                        t(contrast_vec))[1, 1])
-                        c(pval, coef, sigma)
-                    }, warning = function(w) {
-                        message(sprintf("Feature %s : %s", 
-                                        names(fit), w))
-                        
-                        assign("error_message",
-                                conditionMessage(w),
-                                envir = calling_env)
-                        invokeRestart("muffleWarning")
-                    },
-                    error = function(err) {
-                        assign("error_message", err$message, 
-                                envir = calling_env)
-                        error_obj <- c(NA, NA, NA)
-                        return(error_obj)
-                    })
-                    pvals_new[row_index] <- 
-                        test_out[1]
-                }
-            }
+                    assign("error_message", conditionMessage(w), 
+                        envir = calling_env)
+                    invokeRestart("muffleWarning")
+                }, error = function(err) {
+                    assign("error_message", err$message, envir = calling_env)
+                    error_obj <- c(NA, NA, NA)
+                    return(error_obj)
+                })
+                
+                return(test_out[1])
+            }, numeric(1))
             
-            paras$error[paras$test == selected_test & 
-                        !is.na(paras$coef) & 
-                        !is.na(paras$stderr)] <- 
-                ifelse(!is.na(paras$pval_individual[
-                                paras$test == selected_test & 
-                                !is.na(paras$coef) & 
-                                !is.na(paras$stderr)]) & 
-                            is.na(pvals_new),
-                        "P-value became NA during median comparison",
-                        paras$error[paras$test == selected_test & 
-                                    !is.na(paras$coef) & 
-                                    !is.na(paras$stderr)]
+            paras_sub$error <- 
+                ifelse(!is.na(paras_sub$pval_individual) & 
+                        is.na(pvals_new),
+                    "P-value became NA during median comparison",
+                    paras_sub$error
                 )
             
-            paras$pval_individual[paras$test == selected_test & 
-                                !is.na(paras$coef) & 
-                                !is.na(paras$stderr)] <- pvals_new
-        }
+            paras_sub$pval_individual <- pvals_new
+            paras_sub$rhs <- offsets_to_test
+            
+            return(rbind(paras_sub, paras_sub_out))
+        }))
+    }
+    
+    if (!is.null(rownames(paras)) && 
+        !any(is.na(as.numeric(rownames(paras))))) {
+        paras <- paras[order(as.numeric(rownames(paras))),]
     }
     
     return(paras)
@@ -866,14 +776,19 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
     # samples x features with same samples
     
     dna_table <- TSSnorm(dna_table, 0)
-    for (col_index in seq(ncol(dna_table))) {
-        dna_table[, col_index][is.na(dna_table[, col_index])] <- 0
-    }
-    
+    dna_table <- apply(dna_table, 2, function(x) {
+        x[is.na(x)] <- 0
+        return(x)
+    })
+    dna_table <- as.data.frame(dna_table)
+
     rna_table <- TSSnorm(rna_table, 0)
-    for (col_index in seq(ncol(rna_table))) {
-        rna_table[, col_index][is.na(rna_table[, col_index])] <- 0
-    }
+    rna_table <- apply(rna_table, 2, function(x) {
+        x[is.na(x)] <- 0
+        return(x)
+    })
+    rna_table <- as.data.frame(rna_table)
+    
     
     # Transforming DNA table
     impute_val <- log2(min(dna_table[dna_table > 0]) / 2)

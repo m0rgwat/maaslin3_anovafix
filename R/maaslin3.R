@@ -116,6 +116,7 @@ args$plot_associations <- TRUE
 args$max_pngs <- 30
 args$cores <- 1
 args$save_models <- FALSE
+args$save_plots_rds <- FALSE
 args$reference <- NULL
 args$summary_plot_balanced <- FALSE
 
@@ -582,7 +583,18 @@ options <-
             "and save to an RData file [ Default: %default ]"
         )
     )
-
+options <-
+    optparse::add_option(
+        options,
+        c("--save_plots_rds"),
+        type = "logical",
+        dest = "save_plots_rds",
+        default = args$save_plots_rds,
+        help = paste(
+            "Save the plots to RDS files",
+            "[ Default: %default ]"
+        )
+    )
 options <-
     optparse::add_option(
         options,
@@ -779,6 +791,7 @@ maaslin_log_arguments <- function(input_data,
                                 max_pngs = 30,
                                 cores = 1,
                                 save_models = FALSE,
+                                save_plots_rds = FALSE,
                                 verbosity = 'FINEST',
                                 summary_plot_balanced = FALSE) {
     # Allow for lower case variables
@@ -926,8 +939,9 @@ maaslin_read_data <- function(input_data,
             stop("If supplying input_data as a data frame, 
                 it must have appropriate rownames!")
         }
-        data <-
-            as.data.frame(input_data) # in case it's a tibble or something
+        data <- as.data.frame(input_data) # in case it's a tibble or something
+    } else if (inherits(metadata, 'DataFrame')) {
+        data <- as.data.frame(input_data) # If it's BioC's DataFrame
     } else if (is.matrix(input_data)) {
         logging::logwarn("Input is a matrix, 
                         passing through as.data.frame() .")
@@ -951,6 +965,8 @@ maaslin_read_data <- function(input_data,
         }
         metadata <-
             as.data.frame(input_metadata) # in case it's a tibble or something
+    } else if (inherits(metadata, 'DataFrame')) {
+        metadata <- as.data.frame(input_metadata) # If it's BioC's DataFrame
     } else {
         stop("input_metadata is neither a file nor a data frame!")
     }
@@ -969,8 +985,10 @@ maaslin_read_data <- function(input_data,
                 it must have appropriate rownames!"
             )
         }
-        unscaled_abundance <-
-            as.data.frame(unscaled_abundance)
+        unscaled_abundance <- as.data.frame(unscaled_abundance)
+    } else if (inherits(unscaled_abundance, 'DataFrame')) {
+        unscaled_abundance <- 
+            as.data.frame(unscaled_abundance) # If it's BioC's DataFrame
     } else if (!is.null(unscaled_abundance)) {
         stop("unscaled_abundance is not a file or data frame!")
     }
@@ -991,6 +1009,9 @@ maaslin_read_data <- function(input_data,
         }
         feature_specific_covariate <-
             as.data.frame(feature_specific_covariate) 
+    } else if (inherits(feature_specific_covariate, 'DataFrame')) {
+        feature_specific_covariate <- 
+            as.data.frame(feature_specific_covariate) # If it's BioC's DataFrame
     } else if (!is.null(feature_specific_covariate)) {
         stop("feature_specific_covariate is not a file or data frame!")
     }
@@ -1603,6 +1624,8 @@ maaslin_normalize <- function(data,
                             unscaled_abundance = NULL) {
     features <- data
     
+    match.arg(normalization, normalization_choices)
+    
     normalization <- toupper(normalization)
     
     logging::loginfo("Running selected normalization method: %s", normalization)
@@ -1851,6 +1874,8 @@ maaslin_process_metadata <- function(metadata,
 maaslin_transform <- function(filtered_data,
                             output,
                             transform = 'LOG') {
+    match.arg(transform, transform_choices)
+    
     features <- filtered_data
     
     logging::loginfo("Running selected transform method: %s", transform)
@@ -1913,9 +1938,11 @@ maaslin_fit <- function(filtered_data,
                         cores = 1,
                         save_models = FALSE,
                         data = NULL,
-                        min_abundance = NULL,
-                        min_prevalence = NULL,
-                        min_variance = NULL) {
+                        min_abundance = 0,
+                        min_prevalence = 0,
+                        min_variance = 0) {
+    
+    match.arg(correction, correction_choices)
     
     if (!is.null(feature_specific_covariate)) {
         tryCatch({
@@ -2325,7 +2352,8 @@ maaslin_plot_results <- function(output,
                                 heatmap_vars = NULL,
                                 plot_associations = TRUE,
                                 max_pngs = 30,
-                                balanced = FALSE) {
+                                balanced = FALSE,
+                                save_plots_rds = FALSE) {
     ret_plots <- list()
     # create an output folder and figures folder if it does not exist
     if (!file.exists(output)) {
@@ -2374,7 +2402,8 @@ maaslin_plot_results <- function(output,
             heatmap_vars = heatmap_vars,
             median_comparison_abundance = median_comparison_abundance,
             median_comparison_prevalence = median_comparison_prevalence,
-            balanced = balanced
+            balanced = balanced,
+            save_plots_rds = save_plots_rds
         )
         ret_plots[["summary_plot"]] <- summary_plot
     }
@@ -2405,7 +2434,8 @@ maaslin_plot_results <- function(output,
                     feature_specific_covariate_name = 
                         feature_specific_covariate_name,
                     feature_specific_covariate_record = 
-                        feature_specific_covariate_record
+                        feature_specific_covariate_record,
+                    save_plots_rds = save_plots_rds
                 )
             },
             warning = function(w) {
@@ -2438,7 +2468,8 @@ maaslin_plot_results_from_output <- function(output,
                                             heatmap_vars = NULL,
                                             plot_associations = TRUE,
                                             max_pngs = 30,
-                                            balanced = FALSE) {
+                                            balanced = FALSE,
+                                            save_plots_rds = FALSE) {
     ret_plots <- list()
     
     # create an output folder and figures folder if it does not exist
@@ -2493,7 +2524,8 @@ maaslin_plot_results_from_output <- function(output,
             heatmap_vars = heatmap_vars,
             median_comparison_abundance = median_comparison_abundance,
             median_comparison_prevalence = median_comparison_prevalence,
-            balanced = balanced
+            balanced = balanced,
+            save_plots_rds = save_plots_rds
         )
         ret_plots[["summary_plot"]] <- summary_plot
     }
@@ -2564,7 +2596,8 @@ maaslin_plot_results_from_output <- function(output,
                     feature_specific_covariate_name = 
                         feature_specific_covariate_name,
                     feature_specific_covariate_record = 
-                        feature_specific_covariate_record
+                        feature_specific_covariate_record,
+                    save_plots_rds = save_plots_rds
                 )
             },
             warning = function(w) {
@@ -2624,8 +2657,11 @@ maaslin3 <- function(input_data,
                     max_pngs = 30,
                     cores = 1,
                     save_models = FALSE,
+                    save_plots_rds = FALSE,
                     verbosity = 'FINEST',
                     summary_plot_balanced = FALSE) {
+    match.arg(verbosity, c("FINEST", "FINER", "FINE", "DEBUG", "INFO", 
+                            "WARN", "ERROR"))
     logging::logReset()
     
     # Allow for lower case variables
@@ -2690,6 +2726,7 @@ maaslin3 <- function(input_data,
         max_pngs,
         cores,
         save_models,
+        save_plots_rds,
         verbosity,
         summary_plot_balanced
     )
@@ -2831,7 +2868,8 @@ maaslin3 <- function(input_data,
                     heatmap_vars,
                     plot_associations,
                     max_pngs,
-                    summary_plot_balanced
+                    summary_plot_balanced,
+                    save_plots_rds
                 )
             },
             warning = function(w) {
@@ -2928,6 +2966,7 @@ if (identical(environment(), globalenv()) &&
             plot_associations = current_args$plot_associations,
             max_pngs = current_args$max_pngs,
             save_models = current_args$save_models,
+            save_plots_rds = current_args$save_plots_rds,
             augment = current_args$augment,
             evaluate_only = current_args$evaluate_only,
             reference = current_args$reference,

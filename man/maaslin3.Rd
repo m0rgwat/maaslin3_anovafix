@@ -57,13 +57,15 @@ maaslin3(input_data,
     max_pngs = 30,
     cores = 1,
     save_models = FALSE,
+    save_plots_rds = FALSE,
     verbosity = 'FINEST',
     summary_plot_balanced = FALSE)
 }
 \arguments{
     \item{input_data}{A data frame of feature abundances or read counts, a
     filepath to a tab-delimited file with abundances, or a SummarizedExperiment
-    object with the taxa table in `assays` and metadata in `colData`. 
+    or TreeSummarizedExperiment object with the taxa table in `assays` and 
+    metadata in `colData`. 
     If a data frame or a filepath is supplied, the table should be formatted 
     with features as columns and samples as rows (or the transpose). The
     column and row names should be the feature names and sample names
@@ -210,6 +212,8 @@ maaslin3(input_data,
     \item{cores}{How many cores to use when fitting models. (Using multiple
     cores will likely be faster only for large datasets or complex models.}
     \item{save_models}{Whether to return the fit models and save them to an
+    RData file.}
+    \item{save_plots_rds}{Whether to return the fit models and save them to an
     RData file.}
     \item{verbosity}{The level of verbosity for the \code{logging} package.}
     \item{summary_plot_balanced}{If set to TRUE the summary plot will 

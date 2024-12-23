@@ -37,7 +37,9 @@ bioRxiv 2024.12.13.628459; doi: https://doi.org/10.1101/2024.12.13.628459
 
 ### Support ###
 The user manual can be found
-[here](https://github.com/biobakery/maaslin3). If you have questions,
+[here](https://github.com/biobakery/maaslin3). If using vignettes,
+users should start with the `maaslin3_tutorial.Rmd` vignette and then
+refer to the `maaslin3_manual.Rmd` vignette as necessary. If you have questions,
 please direct them to the [MaAsLin
 Forum](https://forum.biobakery.org/c/Downstream-analysis-and-statistics/maaslin)
 
@@ -117,23 +119,16 @@ software and use `sessionInfo()` to make sure that you indeed have R >=
 
 ## 2. Installing MaAsLin 3 {#installing-maaslin-3}
 
-The latest development version of MaAsLin 3 can be installed from GitHub
-using the `devtools` package.
+The latest version of MaAsLin 3 can be installed from BiocManager.
 
 ```{r, eval=FALSE, cache = FALSE}
-if (!require('kableExtra', character.only = TRUE)) {
-    install.packages('kableExtra')
-}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
 
-# Install devtools if not present
-if (!require('devtools', character.only = TRUE)) {
-    install.packages('devtools')
-}
-
-# Install MaAsLin 3
-library("devtools")
-install_github("biobakery/maaslin3")
+BiocManager::install("biobakery/maaslin3")
 ```
+
+To compile vignettes yourself, specify `dependencies = TRUE`.
 
 ```{r, eval=TRUE, cache = FALSE, echo=FALSE}
 for (lib in c('maaslin3', 'dplyr', 'ggplot2', 'knitr', 'kableExtra')) {
@@ -326,8 +321,8 @@ By default, many lines of information are printed while the models fit,
 but the verbosity can be changed with the `verbosity` argument (e.g., 
 `verbosity = 'WARN'`).
 
-MaAsLin 3 can also take as input a `SummarizedExperiment` object from
-BioConductor:
+MaAsLin 3 can also take as input a `SummarizedExperiment` or 
+`TreeSummarizedExperiment` object from BioConductor:
 
 ```{R, echo = TRUE, results = 'hide', warning = FALSE, eval = FALSE}
 se <- SummarizedExperiment(
@@ -814,6 +809,13 @@ head(fit_out$fit_data_abundance$results, n = 20) %>%
     kableExtra::scroll_box(width = "800px", height = "400px")
 ```
 
+#### Computationally estimated absolute abundance
+
+When using a purely computational approach to estimate absolute abundance
+(e.g., Nishijima et al. Cell 2024 with the function `MLP`), the abundance 
+table can be estimated
+and then run with the `normalization = 'NONE'` to avoid scaling the results.
+
 ### 4.2 Random effects (clustered samples) {#random-effects}
 
 Certain studies have a natural "grouping" of sample observations, such
@@ -832,7 +834,7 @@ where the same subject (column `participant_id`) can have multiple
 samples. We thus use `participant_id` as a random effect grouping
 variable in the model.
 
-```{R, echo = TRUE, results = 'hide', warning = FALSE}
+```{R, echo = TRUE, results = 'hide', warning = FALSE, messages = FALSE}
 # Subset to only CD cases for time; taxa are subset automatically
 fit_out <- maaslin3(
     input_data = taxa_table,
@@ -1101,7 +1103,8 @@ combination of the coefficients is significantly different from some constant
 on the right hand size (RHS). Specify a contrast matrix
 with column names matching the coefficient names and rows with the contrasts
 of interest. For each row $C^T$, the hypothesis $H_0:C^T\vec{\beta}=RHS$ 
-will be tested.
+will be tested. If no RHS is specified, a median test will be performed,
+and the median test RHS will be returned.
 
 Below, we test whether the UC and CD diagnosis coefficients are the same
 and whether the UC and CD dysbiosis coefficients are the same. The contrast
@@ -1164,6 +1167,26 @@ slashes may need to be removed):
     features) file
     * ``inst/extdata/HMP2_metadata.tsv`` is the path to your metadata file
     * ``command_line_output`` is the path to the folder to write the output
+
+## Tool comparison ##
+
+| Tool | Models differential abundance | \
+Models differential prevalence | Models allowed | Accounts for\
+compositionality | Can use experimental absolute abundance information |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| MaAsLin 3 | Yes | Yes, for any model type | Any lme4 model\
+(general mixed models), level-vs-level differences, group-wise differences, \
+feature-specific covariates, contrast tests | Yes | Yes |
+| MaAsLin 2 | Yes | Only insofar as it affects abundance | Fixed and random \
+effects (subset of general mixed models) | No | No |
+| ANCOM-BC2 | Yes | Only when completely absent in a group | Any lme4 model \
+(general mixed models), level-vs-level differences, group-wise differences, \
+contrast tests | Yes | No |
+| ALDEx2 | Yes | Only insofar as it affects abundance | Fixed \
+effects | Yes | No |
+| LinDA | Yes | Only insofar as it affects abundance | Any lme4 model \
+(general mixed models), group-wise differences, contrast tests | Yes | No |
+
 
 ```{R}
 sessionInfo()

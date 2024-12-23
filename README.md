@@ -22,7 +22,9 @@ bioRxiv 2024.12.13.628459; doi: https://doi.org/10.1101/2024.12.13.628459
 ### Support ###
 Check out the [MaAsLin 3
 tutorial](https://github.com/biobakery/biobakery/wiki/MaAsLin3) for an
-overview of analysis options and some example runs.
+overview of analysis options and some example runs. If using vignettes,
+users should start with the `maaslin3_tutorial.Rmd` vignette and then
+refer to the `maaslin3_manual.Rmd` vignette as necessary.
 
 If you have questions, please direct them to the [MaAsLin 3
 Forum](https://forum.biobakery.org/c/Downstream-analysis-and-statistics/maaslin)
@@ -60,19 +62,16 @@ function.
 
 #### Install using GitHub and devtools
 
-The latest development version of MaAsLin 3 can be installed from GitHub
-using the `devtools` package.
+The latest version of MaAsLin 3 can be installed from BiocManager.
 
 ```
-# Install devtools if not present
-if (!require('devtools', character.only = TRUE)) {
-    install.packages('devtools')
-}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
 
-# Install MaAsLin 3
-library("devtools")
-install_github("biobakery/maaslin3")
+BiocManager::install("biobakery/maaslin3")
 ```
+
+To compile vignettes yourself, specify `dependencies = TRUE`.
 
 ```
 for (lib in c('maaslin3', 'dplyr', 'ggplot2', 'knitr')) {
@@ -661,6 +660,26 @@ complex models.)
 save them to an RData file.
 * `verbosity` (default `'FINEST'`): The level of verbosity for the 
 `logging` package.
+* `save_plots_rds` (default `FALSE`): Whether to save the plots as RDS files.
+
+## Tool comparison ##
+
+| Tool | Models differential abundance | \
+Models differential prevalence | Models allowed | Accounts for\
+compositionality | Can use experimental absolute abundance information |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| MaAsLin 3 | Yes | Yes, for any model type | Any lme4 model\
+(general mixed models), level-vs-level differences, group-wise differences, \
+feature-specific covariates, contrast tests | Yes | Yes |
+| MaAsLin 2 | Yes | Only insofar as it affects abundance | Fixed and random \
+effects (subset of general mixed models) | No | No |
+| ANCOM-BC2 | Yes | Only when completely absent in a group | Any lme4 model \
+(general mixed models), level-vs-level differences, group-wise differences, \
+contrast tests | Yes | No |
+| ALDEx2 | Yes | Only insofar as it affects abundance | Fixed \
+effects | Yes | No |
+| LinDA | Yes | Only insofar as it affects abundance | Any lme4 model \
+(general mixed models), group-wise differences, contrast tests | Yes | No |
 
 ## Troubleshooting ##
 

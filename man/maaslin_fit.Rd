@@ -30,9 +30,9 @@ maaslin_fit(filtered_data,
             cores = 1,
             save_models = FALSE,
             data = NULL,
-            min_abundance = NULL,
-            min_prevalence = NULL,
-            min_variance = NULL)
+            min_abundance = 0,
+            min_prevalence = 0,
+            min_variance = 0)
 }
 \arguments{
     \item{filtered_data}{A data frame of filtered feature abundances. It

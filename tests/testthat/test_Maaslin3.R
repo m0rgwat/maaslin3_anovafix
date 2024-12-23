@@ -60,4 +60,42 @@ fit_out <- maaslin3(input_data = se,
                     cores=1, 
                     verbosity = 'WARN')
 
+tse <- TreeSummarizedExperiment::TreeSummarizedExperiment(
+    assays = list(taxa_table = t(taxa_table)),
+    colData = metadata
+)
+
+fit_out <- maaslin3(input_data = tse, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ diagnosis + dysbiosis_state + antibiotics + age + reads', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = TRUE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
+metadata <- as(metadata, "DataFrame")
+fit_out <- maaslin3(input_data = tse, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ diagnosis + dysbiosis_state + antibiotics + age + reads', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = TRUE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
 unlink(output_tmp, recursive = T)
