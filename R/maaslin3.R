@@ -940,7 +940,7 @@ maaslin_read_data <- function(input_data,
                 it must have appropriate rownames!")
         }
         data <- as.data.frame(input_data) # in case it's a tibble or something
-    } else if (inherits(metadata, 'DataFrame')) {
+    } else if (inherits(input_data, 'DataFrame')) {
         data <- as.data.frame(input_data) # If it's BioC's DataFrame
     } else if (is.matrix(input_data)) {
         logging::logwarn("Input is a matrix,
