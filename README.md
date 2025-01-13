@@ -662,25 +662,6 @@ save them to an RData file.
 `logging` package.
 * `save_plots_rds` (default `FALSE`): Whether to save the plots as RDS files.
 
-## Tool comparison ##
-
-| Tool | Models differential abundance | \
-Models differential prevalence | Models allowed | Accounts for\
-compositionality | Can use experimental absolute abundance information |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| MaAsLin 3 | Yes | Yes, for any model type | Any lme4 model\
-(general mixed models), level-vs-level differences, group-wise differences, \
-feature-specific covariates, contrast tests | Yes | Yes |
-| MaAsLin 2 | Yes | Only insofar as it affects abundance | Fixed and random \
-effects (subset of general mixed models) | No | No |
-| ANCOM-BC2 | Yes | Only when completely absent in a group | Any lme4 model \
-(general mixed models), level-vs-level differences, group-wise differences, \
-contrast tests | Yes | No |
-| ALDEx2 | Yes | Only insofar as it affects abundance | Fixed \
-effects | Yes | No |
-| LinDA | Yes | Only insofar as it affects abundance | Any lme4 model \
-(general mixed models), group-wise differences, contrast tests | Yes | No |
-
 ## Troubleshooting ##
 
 1. Question: When I run from the command line I see the error

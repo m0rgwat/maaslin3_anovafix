@@ -120,7 +120,8 @@ maaslin3(input_data,
     names
     and sample names respectively.}
     \item{feature_specific_covariate_name}{The name for the feature-specific
-    covariates when fitting the models.}
+    covariates when fitting the models. This string must be parse-able
+    in a formula (e.g., no spaces).}
     \item{feature_specific_covariate_record}{Whether to keep the
     feature-specific covariates in the outputs when calculating p-values,
     writing results, and displaying plots.}
