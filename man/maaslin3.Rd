@@ -19,7 +19,7 @@ This wrapper for all MaAsLin 3 steps finds abundance and prevalence
 }
 \usage{
 maaslin3(input_data,
-    input_metadata,
+    input_metadata = NULL,
     output,
     formula = NULL,
     fixed_effects = NULL,
@@ -59,7 +59,8 @@ maaslin3(input_data,
     save_models = FALSE,
     save_plots_rds = FALSE,
     verbosity = 'FINEST',
-    summary_plot_balanced = FALSE)
+    summary_plot_balanced = FALSE,
+    assay_type = 1)
 }
 \arguments{
     \item{input_data}{A data frame of feature abundances or read counts, a
@@ -222,6 +223,8 @@ maaslin3(input_data,
     \code{coef_plot_vars} where N is equal to: 
     \code{ceiling(summary_plot_first_n/length(coef_plot_vars))}. Will error
     if \code{coef_plot_vars} = \code{NULL}}
+    \item{assay_type}{A string or index to select the assay when using
+    a \code{SummarizedExperiment} object}
 }
 \value{
     A list containing the following items:

@@ -61,12 +61,14 @@ fit_out <- maaslin3(input_data = se,
                     verbosity = 'WARN')
 
 tse <- TreeSummarizedExperiment::TreeSummarizedExperiment(
-    assays = list(taxa_table = t(taxa_table)),
+    assays = list(taxa_table_junk = matrix(0, nrow = ncol(taxa_table), ncol = nrow(taxa_table)),
+                  another_taxa_table = t(taxa_table)),
     colData = metadata
 )
 
+metadata_df <- as(metadata, "DataFrame")
 fit_out <- maaslin3(input_data = tse, 
-                    input_metadata = metadata, 
+                    input_metadata = metadata_df, 
                     output = output_tmp, 
                     normalization = 'TSS', 
                     transform = 'LOG', 
@@ -79,9 +81,9 @@ fit_out <- maaslin3(input_data = tse,
                     median_comparison_abundance = TRUE, 
                     median_comparison_prevalence = FALSE, 
                     cores=1, 
-                    verbosity = 'WARN')
+                    verbosity = 'WARN',
+                    assay_type = 'another_taxa_table')
 
-metadata <- as(metadata, "DataFrame")
 fit_out <- maaslin3(input_data = tse, 
                     input_metadata = metadata, 
                     output = output_tmp, 
@@ -96,6 +98,7 @@ fit_out <- maaslin3(input_data = tse,
                     median_comparison_abundance = TRUE, 
                     median_comparison_prevalence = FALSE, 
                     cores=1, 
-                    verbosity = 'WARN')
+                    verbosity = 'WARN',
+                    assay_type = 2)
 
 unlink(output_tmp, recursive = T)

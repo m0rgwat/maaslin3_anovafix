@@ -889,7 +889,7 @@ significant associations.
 * `max_pngs` (default `30`): The top `max_pngs` significant associations
 will be plotted.
 
-#### Technical parameters ####
+#### Technical/miscellaneous parameters ####
 
 * `cores` (default `1`): How many cores to use when fitting models.
 (Using multiple cores will likely be faster only for large datasets or
@@ -899,6 +899,8 @@ save them to an RData file.
 * `verbosity` (default `'FINEST'`): The level of verbosity for the 
 `logging` package.
 * `save_plots_rds` (default `FALSE`): Whether to save the plots as RDS files.
+* `assay_type` (default `1`): A string or index to select the assay when using
+a `SummarizedExperiment` object.
 
 ## Tool comparison ##
 
