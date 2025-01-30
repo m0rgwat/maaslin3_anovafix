@@ -24,8 +24,8 @@ maaslin_filter(normalized_data,
     respectively.}
     \item{output}{The output folder to write results.}
     \item{min_abundance}{Features with abundances more than
-    \code{min_abundance} in \code{min_prevalence} of the samples will be
-    included for analysis. The threshold is applied after normalization and
+    \code{min_abundance} in more than \code{min_prevalence} of the samples will 
+    be included for analysis. The threshold is applied after normalization and
     before transformation.}
     \item{min_prevalence}{See \code{min_abundance}.}
     \item{zero_threshold}{Abundances less than or equal to
