@@ -60,7 +60,7 @@ maaslin3(input_data,
     save_plots_rds = FALSE,
     verbosity = 'FINEST',
     summary_plot_balanced = FALSE,
-    assay_type = 1)
+    assay.type = 1)
 }
 \arguments{
     \item{input_data}{A data frame of feature abundances or read counts, a
@@ -223,7 +223,7 @@ maaslin3(input_data,
     \code{coef_plot_vars} where N is equal to: 
     \code{ceiling(summary_plot_first_n/length(coef_plot_vars))}. Will error
     if \code{coef_plot_vars} = \code{NULL}}
-    \item{assay_type}{A string or index to select the assay when using
+    \item{assay.type}{A string or index to select the assay when using
     a \code{SummarizedExperiment} object}
 }
 \value{

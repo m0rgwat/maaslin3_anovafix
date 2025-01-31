@@ -2660,7 +2660,7 @@ maaslin3 <- function(input_data,
                     save_plots_rds = FALSE,
                     verbosity = 'FINEST',
                     summary_plot_balanced = FALSE,
-                    assay_type = 1) {
+                    assay.type = 1) {
     match.arg(verbosity, c("FINEST", "FINER", "FINE", "DEBUG", "INFO",
                             "WARN", "ERROR"))
     logging::logReset()
@@ -2680,7 +2680,7 @@ maaslin3 <- function(input_data,
 
     if (inherits(input_data, "SummarizedExperiment")) {
         summarized_experiment_out <-
-            maaslin_read_summarized_experiment_data(input_data, assay_type)
+            maaslin_read_summarized_experiment_data(input_data, assay.type)
 
         input_data <- summarized_experiment_out[['data']]
         input_metadata <- summarized_experiment_out[['metadata']]

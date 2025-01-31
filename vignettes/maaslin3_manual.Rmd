@@ -899,7 +899,7 @@ save them to an RData file.
 * `verbosity` (default `'FINEST'`): The level of verbosity for the 
 `logging` package.
 * `save_plots_rds` (default `FALSE`): Whether to save the plots as RDS files.
-* `assay_type` (default `1`): A string or index to select the assay when using
+* `assay.type` (default `1`): A string or index to select the assay when using
 a `SummarizedExperiment` object.
 
 ## Tool comparison ##

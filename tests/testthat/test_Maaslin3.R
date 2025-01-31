@@ -82,7 +82,7 @@ fit_out <- maaslin3(input_data = tse,
                     median_comparison_prevalence = FALSE, 
                     cores=1, 
                     verbosity = 'WARN',
-                    assay_type = 'another_taxa_table')
+                    assay.type = 'another_taxa_table')
 
 fit_out <- maaslin3(input_data = tse, 
                     input_metadata = metadata, 
@@ -99,6 +99,6 @@ fit_out <- maaslin3(input_data = tse,
                     median_comparison_prevalence = FALSE, 
                     cores=1, 
                     verbosity = 'WARN',
-                    assay_type = 2)
+                    assay.type = 2)
 
 unlink(output_tmp, recursive = T)
