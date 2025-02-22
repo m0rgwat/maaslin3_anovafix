@@ -99,3 +99,13 @@ expect_error(maaslin_compute_formula(data,
                                      strata_effects = character(0),
                                      feature_specific_covariate_name = NULL))
 
+colnames(metadata) <- c("a b", "c d", "c")
+expect_that(maaslin_compute_formula(data,
+                                    metadata,
+                                    fixed_effects = c('a b'),
+                                    random_effects = NULL,
+                                    group_effects = NULL,
+                                    ordered_effects = NULL,
+                                    strata_effects = 'c d',
+                                    feature_specific_covariate_name = NULL)$formula, 
+            equals(formula(expr ~ `a b` + strata(`c d`))))

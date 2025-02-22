@@ -101,4 +101,113 @@ fit_out <- maaslin3(input_data = tse,
                     verbosity = 'WARN',
                     assay.type = 2)
 
+output_tmp <- tempfile()
+set.seed(1)
+fit_out <- maaslin3(input_data = taxa_table, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ diagnosis + dysbiosis_state + antibiotics + age + reads', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = TRUE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
+# Weird names
+taxa_table <- read.table(system.file(package="maaslin3","extdata","HMP2_taxonomy.tsv"), header = TRUE, sep="\t")
+metadata <- read.table(system.file(package="maaslin3","extdata","HMP2_metadata.tsv"), header = TRUE, sep="\t")
+
+metadata$diagnosis <- factor(metadata$diagnosis, levels = c('nonIBD', 'UC', 'CD'))
+metadata$antibiotics <- factor(metadata$antibiotics, levels = c('No', 'Yes'))
+
+colnames(metadata)[colnames(metadata) == 'dysbiosis_state'] <- c("dysbiosis state")
+colnames(metadata)[colnames(metadata) == 'red_meat'] <- c("red meat")
+metadata$`red meat` <- factor(metadata$`red meat`)
+rownames(metadata) <- gsub('_', ' ', rownames(metadata))
+metadata$`dysbiosis state` <- gsub('_', ' ', as.character(metadata$`dysbiosis state`))
+metadata$`dysbiosis state` <- factor(metadata$`dysbiosis state`, levels = c('none', 'dysbiosis UC', 'dysbiosis CD'))
+
+rownames(taxa_table) <- gsub('_', ' ', rownames(taxa_table))
+colnames(taxa_table) <- gsub('_', ' ', colnames(taxa_table))
+
+output_tmp <- tempfile()
+set.seed(1)
+fit_out <- maaslin3(input_data = taxa_table, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ ordered(`red meat`)', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = FALSE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
+fit_out2 <- maaslin3(input_data = taxa_table, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    ordered_effects = 'red meat',
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = FALSE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
+expect_that(fit_out$fit_data_abundance$results$coef,
+            equals(fit_out2$fit_data_abundance$results$coef))
+
+
+fit_out <- maaslin3(input_data = taxa_table, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ group(`red meat`)', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = FALSE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
+fit_out2 <- maaslin3(input_data = taxa_table, 
+                     input_metadata = metadata, 
+                     output = output_tmp, 
+                     normalization = 'TSS', 
+                     transform = 'LOG', 
+                     group_effects = 'red meat',
+                     save_models = FALSE, 
+                     plot_summary_plot = T, 
+                     plot_associations = T, 
+                     max_significance = 0.1, 
+                     augment = TRUE, 
+                     median_comparison_abundance = FALSE, 
+                     median_comparison_prevalence = FALSE, 
+                     cores=1, 
+                     verbosity = 'WARN')
+
+expect_that(fit_out$fit_data_abundance$results$coef,
+            equals(fit_out2$fit_data_abundance$results$coef))
+
 unlink(output_tmp, recursive = T)
+

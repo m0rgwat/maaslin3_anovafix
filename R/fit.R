@@ -2,7 +2,7 @@
 ###############################################################################
 # MaAsLin3 fitting
 
-# Copyright (c) 2024 Harvard School of Public Health
+# Copyright (c) 2025 Harvard School of Public Health
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -143,7 +143,8 @@ get_fixed_effects <-
         }
         
         ordered_levels <- unlist(lapply(ordereds, function(ordered) {
-            paste0(ordered, levels(dat_sub[[ordered]])[-1])
+            ordered_no_ticks <- gsub("^`|`$", "", ordered)
+            paste0(ordered, levels(dat_sub[[ordered_no_ticks]])[-1])
         }))
         
         names_to_include <-
@@ -287,27 +288,29 @@ add_joint_signif <-
         # Subset to shared columns
         fit_data_prevalence_signif <-
             fit_data_prevalence$results[, c("feature", "metadata", "value",
-                                            "name", "coef", "pval", "qval",
-                                            "error")]
+                                            "name", "coef", "null_hypothesis",
+                                            "pval", "qval", "error")]
         colnames(fit_data_prevalence_signif) <-
             c("feature",
             "metadata",
             "value",
             "name",
             "logistic_coef",
+            "logistic_null_hypothesis",
             "logistic",
             "logistic_qval",
             "logistic_error")
         fit_data_abundance_signif <-
             fit_data_abundance$results[, c("feature", "metadata", "value",
-                                        "name", "coef", "pval", "qval", 
-                                        "error")]
+                                            "name", "coef", "null_hypothesis",
+                                            "pval", "qval", "error")]
         colnames(fit_data_abundance_signif) <-
             c("feature",
             "metadata",
             "value",
             "name",
             "linear_coef",
+            "linear_null_hypothesis",
             "linear",
             "linear_qval",
             "linear_error")
@@ -333,27 +336,30 @@ add_joint_signif <-
         if (!is.null(new_fit_data_abundance)) {
             fit_data_prevalence_signif_tmp <-
                 fit_data_prevalence$results[, c("feature", "metadata", "value",
-                                                "name", "coef", "pval", "qval",
-                                                "error")]
+                                            "name", "coef", "null_hypothesis",
+                                            "pval", "qval", "error")]
             colnames(fit_data_prevalence_signif_tmp) <-
                 c("feature",
                     "metadata",
                     "value",
                     "name",
                     "logistic_coef",
+                    "logistic_null_hypothesis",
                     "logistic",
                     "logistic_qval",
                     "logistic_error")
             fit_data_abundance_signif_tmp <-
-                new_fit_data_abundance$results[, c("feature", "metadata", 
-                                                    "value", "name", "coef", 
-                                                    "pval", "qval", "error")]
+                new_fit_data_abundance$results[, 
+                    c("feature", "metadata", "value",
+                    "name", "coef", "null_hypothesis",
+                    "pval", "qval", "error")]
             colnames(fit_data_abundance_signif_tmp) <-
                 c("feature",
                     "metadata",
                     "value",
                     "name",
                     "linear_coef",
+                    "linear_null_hypothesis",
                     "linear",
                     "linear_qval",
                     "linear_error")
@@ -374,6 +380,7 @@ add_joint_signif <-
                                 "value",
                                 "name",
                                 "logistic_coef",
+                                "logistic_null_hypothesis",
                                 "logistic",
                                 "logistic_qval")
             
@@ -506,7 +513,7 @@ choose_ranef_model_summary_funs_linear <- function(random_effects_formula) {
         summary_function <- function(fit, names_to_include) {
             lm_summary <- summary(fit)$coefficients
             
-            store_names <- gsub('`', '', rownames(lm_summary))
+            store_names <- rownames(lm_summary)
             if (!all(names_to_include %in% store_names)) {
                 # If deficient rank, make sure all rownames are included
                 rows_to_add <-
@@ -569,7 +576,7 @@ choose_ranef_model_summary_funs_linear <- function(random_effects_formula) {
         summary_function <- function(fit, names_to_include) {
             lm_summary <- coef(summary(fit))
             
-            store_names <- gsub('`', '', rownames(lm_summary))
+            store_names <- rownames(lm_summary)
             if (!all(names_to_include %in% store_names)) {
                 # If deficient rank, make sure all rownames are included
                 rows_to_add <-
@@ -694,8 +701,7 @@ choose_ranef_model_summary_funs_logistic <- function(random_effects_formula,
                 function(fit, names_to_include) {
                     lm_summary <- coef(summary(fit))
                     
-                    store_names <-
-                        gsub('`', '', rownames(lm_summary))
+                    store_names <- rownames(lm_summary)
                     if (!all(names_to_include %in% store_names)) {
                         # If deficient rank, 
                         # make sure all rownames are included
@@ -769,8 +775,7 @@ choose_ranef_model_summary_funs_logistic <- function(random_effects_formula,
             summary_function <-
                 function(fit, names_to_include) {
                     lm_summary <- summary(fit)$coefficients
-                    store_names <-
-                        gsub('`', '', rownames(lm_summary))
+                    store_names <- rownames(lm_summary)
                     if (!all(names_to_include %in% store_names)) {
                         # If deficient rank, 
                         # make sure all rownames are included
@@ -924,7 +929,7 @@ choose_ranef_model_summary_funs_logistic <- function(random_effects_formula,
         summary_function <- function(fit, names_to_include) {
             lm_summary <- coef(summary(fit))
             
-            store_names <- gsub('`', '', rownames(lm_summary))
+            store_names <- rownames(lm_summary)
             if (!all(names_to_include %in% store_names)) {
                 # If deficient rank, make sure all rownames are included
                 rows_to_add <-
@@ -1304,27 +1309,28 @@ run_group_models <- function(ranef_function,
                                 NA
                             })
                     } else {
-                        contrast_mat <- matrix(0, ncol = length(
-                            lme4::fixef(fit)),
-                            nrow = length(levels(dat_sub[[group]])[-1])
-                        )
-                        contrast_mat[seq_along(levels(
-                            dat_sub[[group]])[-1]),
-                            which(names(lme4::fixef(fit)) %in% paste0(
-                                group, levels(dat_sub[[group]])[-1]))] <-
-                            diag(1, nrow = length(levels(dat_sub[[group]])[-1]))
+                group_no_ticks <- gsub("^`|`$", "", group)
+                contrast_mat <- matrix(0, ncol = length(
+                    lme4::fixef(fit)),
+                    nrow = length(levels(dat_sub[[group_no_ticks]])[-1])
+                )
+                contrast_mat[seq_along(levels(
+                dat_sub[[group_no_ticks]])[-1]),
+                which(names(lme4::fixef(fit)) %in% paste0(
+                    group, levels(dat_sub[[group_no_ticks]])[-1]))] <-
+                diag(1, nrow = length(levels(dat_sub[[group_no_ticks]])[-1]))
                         
-                        pval_new <- tryCatch({
-                            lmerTest::contest(
-                                fit, 
-                                contrast_mat,
-                                rhs = 
-                                    rep(0, length(levels(
-                                        dat_sub[[group]])[-1])))[['Pr(>F)']]
-                        },
-                        error = function(err) {
-                            NA
-                        })
+                pval_new <- tryCatch({
+                    lmerTest::contest(
+                        fit, 
+                        contrast_mat,
+                        rhs = 
+                            rep(0, length(levels(
+                                dat_sub[[group_no_ticks]])[-1])))[['Pr(>F)']]
+                },
+                error = function(err) {
+                    NA
+                })
                     }
                 }
                 
@@ -1373,7 +1379,9 @@ run_ordered_models <- function(ranef_function,
     output$para <- rbind(output$para,
                         setNames(do.call(rbind, lapply(ordereds, 
                             function(ordered) {
-        ordered_levels <- paste0(ordered, levels(dat_sub[[ordered]])[-1])
+        ordered_no_ticks <- gsub("^`|`$", "", ordered)
+        ordered_levels <- paste0(ordered,
+            levels(dat_sub[[ordered_no_ticks]])[-1])
         setNames(tryCatch({
             withCallingHandlers({
                 # Catch non-integer # successes first
@@ -1388,7 +1396,7 @@ run_ordered_models <- function(ranef_function,
                     
                     contrast_mat <-
                         matrix(0, ncol = length(coef(fit, complete = FALSE)),
-                            nrow = length(levels(dat_sub[[ordered]])[-1])
+                        nrow = length(levels(dat_sub[[ordered_no_ticks]])[-1])
                         )
                     
                     cols_to_add_1s <-
@@ -1438,9 +1446,10 @@ run_ordered_models <- function(ranef_function,
                         stop("Some ordered levels are missing")
                     }
                     
+                    ordered_no_ticks <- gsub("^`|`$", "", ordered)
                     contrast_mat <-
                         matrix(0, ncol = length(lme4::fixef(fit)),
-                                nrow = length(levels(dat_sub[[ordered]])[-1])
+                        nrow = length(levels(dat_sub[[ordered_no_ticks]])[-1])
                         )
                     
                     cols_to_add_1s <-
@@ -2294,7 +2303,8 @@ fit.model <- function(features,
                     data.frame(
                         expr = as.numeric(featuresVector),
                         feature_specific_covariate = covariateVector,
-                        metadata
+                        metadata, 
+                        check.names = FALSE,
                     )
                 
                 colnames(dat_sub)[colnames(dat_sub) == 
@@ -2302,7 +2312,8 @@ fit.model <- function(features,
                     feature_specific_covariate_name
             } else {
                 dat_sub <- data.frame(expr = 
-                                        as.numeric(featuresVector), metadata)
+                                        as.numeric(featuresVector), metadata, 
+                                        check.names = FALSE)
             }
             
             # 0 or 1 observations
@@ -2575,6 +2586,8 @@ fit.model <- function(features,
             else
                 gsub("^\\:", "", sub(x, "", y))
         }, paras$metadata, paras$name)
+    # Trim ticks if metadata had ticks
+    paras$value <- gsub('^``', '', paras$value)
     
     if (!is.null(feature_specific_covariate_record)) {
         if (!feature_specific_covariate_record) {

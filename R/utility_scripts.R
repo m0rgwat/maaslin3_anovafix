@@ -1,7 +1,7 @@
 ###############################################################################
 # MaAsLin3 utility scripts
 
-# Copyright (c) 2024 Harvard School of Public Health
+# Copyright (c) 2025 Harvard School of Public Health
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -106,7 +106,7 @@ NONEnorm <- function(features, zero_threshold) {
     X <- as.matrix(features)
     X_mask <- ifelse(X > zero_threshold, 1, 0)
     features_NONE <-
-        data.frame(ifelse(X_mask > zero_threshold, X, NA))
+        data.frame(ifelse(X_mask > zero_threshold, X, NA), check.names = FALSE)
     return(features_NONE)
 }
 
@@ -551,7 +551,7 @@ maaslin_contrast_test <- function(fits,
         return(t(test_out_joined))
     }))
     
-    test_out_joined <- data.frame(test_out_joined)
+    test_out_joined <- data.frame(test_out_joined, check.names = FALSE)
     colnames(test_out_joined) <- c("coefs_new", "sigmas_new", 
         "pvals_new", "errors")
     test_out_joined[, seq(3)] <- apply(test_out_joined[, seq(3)], 2, as.numeric)
@@ -721,9 +721,6 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
             intersect(colnames(dna_table), rownames(rna_table))
         
         if (length(samples_column_row) == 0) {
-            # modify possibly included special chars in sample names in metadata
-            rownames(rna_table) <- make.names(rownames(rna_table))
-            
             samples_column_row <-
                 intersect(colnames(dna_table), rownames(rna_table))
         }
@@ -753,11 +750,6 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
             ))
         }
     }
-    
-    # replace unexpected characters in feature names
-    colnames(dna_table) <- make.names(colnames(dna_table))
-    colnames(rna_table) <- make.names(colnames(rna_table))
-    
     intersect_samples <-
         intersect(rownames(dna_table), rownames(rna_table))
     
@@ -825,12 +817,14 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
 # Read from SummarizedExperiment #
 ##################################
 
-maaslin_read_summarized_experiment_data <- function(summarized_experiment, assay.type = 1) {
+maaslin_read_summarized_experiment_data <- 
+    function(summarized_experiment, assay.type = 1) {
     if (!inherits(summarized_experiment, "SummarizedExperiment")) {
         stop("Input must be a SummarizedExperiment object")
     }
     
-    data <- as.data.frame(t(SummarizedExperiment::assay(summarized_experiment, assay.type)))
+    data <- as.data.frame(t(SummarizedExperiment::assay(
+        summarized_experiment, assay.type)))
     metadata <- as.data.frame(
         SummarizedExperiment::colData(summarized_experiment))
     return(list(

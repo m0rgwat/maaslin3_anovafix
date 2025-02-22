@@ -3,7 +3,7 @@
 ###############################################################################
 # MaAsLin 3
 
-# Copyright (c) 2024 Harvard School of Public Health
+# Copyright (c) 2025 Harvard School of Public Health
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -931,9 +931,10 @@ maaslin_read_data <- function(input_data,
     # is a data frame
     if (is.character(input_data) && file.exists(input_data)) {
         data <- read.table(input_data,
-                        header = TRUE,
-                        row.names = 1, sep =
-                            ifelse(grepl('.tsv$', input_data),  '\t', ','))
+            header = TRUE,
+            row.names = 1, 
+            sep = ifelse(grepl('\\.tsv$|\\.txt$', input_data),  '\t', ','),
+            check.names = FALSE)
     } else if (is.data.frame(input_data)) {
         if (!tibble::has_rownames(input_data)) {
             stop("If supplying input_data as a data frame,
@@ -953,9 +954,10 @@ maaslin_read_data <- function(input_data,
     if (is.character(input_metadata) &&
         file.exists(input_metadata)) {
         metadata <- read.table(input_metadata,
-                            header = TRUE,
-                            row.names = 1, sep =
-                                ifelse(grepl('.tsv$', input_data),  '\t', ','))
+            header = TRUE,
+            row.names = 1, 
+            sep = ifelse(grepl('\\.tsv$|\\.txt$', input_data),  '\t', ','),
+            check.names = FALSE)
     } else if (is.data.frame(input_metadata)) {
         if (!tibble::has_rownames(input_metadata)) {
             stop(
@@ -963,8 +965,8 @@ maaslin_read_data <- function(input_data,
                 it must have appropriate rownames!"
             )
         }
-        metadata <-
-            as.data.frame(input_metadata) # in case it's a tibble or something
+        # in case it's a tibble or something
+        metadata <- as.data.frame(input_metadata) 
     } else if (inherits(metadata, 'DataFrame')) {
         metadata <- as.data.frame(input_metadata) # If it's BioC's DataFrame
     } else {
@@ -975,9 +977,10 @@ maaslin_read_data <- function(input_data,
         file.exists(unscaled_abundance)) {
         unscaled_abundance <-
             read.table(unscaled_abundance,
-                    header = TRUE,
-                    row.names = 1, sep =
-                        ifelse(grepl('.tsv$', input_data),  '\t', ','))
+                header = TRUE,
+                row.names = 1, 
+                sep = ifelse(grepl('\\.tsv$|\\.txt$', input_data),  '\t', ','),
+                check.names = FALSE)
     } else if (is.data.frame(unscaled_abundance)) {
         if (!tibble::has_rownames(unscaled_abundance)) {
             stop(
@@ -997,9 +1000,10 @@ maaslin_read_data <- function(input_data,
         file.exists(feature_specific_covariate)) {
         feature_specific_covariate <-
             read.table(feature_specific_covariate,
-                    header = TRUE,
-                    row.names = 1, sep =
-                        ifelse(grepl('.tsv$', input_data),  '\t', ','))
+                header = TRUE,
+                row.names = 1, 
+                sep = ifelse(grepl('\\.tsv$|\\.txt$', input_data),  '\t', ','),
+                check.names = FALSE)
     } else if (is.data.frame(feature_specific_covariate)) {
         if (!tibble::has_rownames(feature_specific_covariate)) {
             stop(
@@ -1046,9 +1050,6 @@ maaslin_reorder_data <- function(data,
         samples_column_row <- intersect(colnames(data), rownames(metadata))
 
         if (length(samples_column_row) == 0) {
-            # modify possibly included special chars in sample names in metadata
-            rownames(metadata) <- make.names(rownames(metadata))
-
             samples_column_row <-
                 intersect(colnames(data), rownames(metadata))
         }
@@ -1082,10 +1083,6 @@ maaslin_reorder_data <- function(data,
                     intersect(rownames(data), colnames(metadata))
 
                 if (length(samples_row_column) == 0) {
-                    # modify possibly included special chars
-                    # in sample names in data
-                    rownames(data) <- make.names(rownames(data))
-
                     samples_row_column <-
                         intersect(rownames(data), colnames(metadata))
                 }
@@ -1148,12 +1145,6 @@ maaslin_reorder_data <- function(data,
 
             if (length(samples_column_row) == 0 |
                 length(samples_row_column) == 0) {
-                # modify possibly included special
-                # chars in sample names in metadata
-                rownames(feature_specific_covariate) <-
-                    make.names(rownames(feature_specific_covariate))
-                rownames(data) <- make.names(rownames(data))
-
                 samples_column_row <-
                     intersect(colnames(data),
                             rownames(feature_specific_covariate))
@@ -1204,17 +1195,6 @@ maaslin_reorder_data <- function(data,
             }
         }
 
-    }
-
-    # replace unexpected characters in feature names
-    colnames(data) <- make.names(colnames(data))
-    if (!is.null(unscaled_abundance)) {
-        colnames(unscaled_abundance) <-
-            make.names(colnames(unscaled_abundance))
-    }
-    if (!is.null(feature_specific_covariate)) {
-        colnames(feature_specific_covariate) <-
-            make.names(colnames(feature_specific_covariate))
     }
 
     # get a set of the samples with both metadata and features
@@ -1351,7 +1331,9 @@ maaslin_compute_formula <- function(data,
     random_effects_formula <- NULL
     # use all metadata if no fixed effects are provided
     if (is.null(fixed_effects)) {
-        fixed_effects <- colnames(metadata)
+        if (is.null(ordered_effects) & is.null(group_effects)) {
+            fixed_effects <- colnames(metadata)
+        }
     } else {
         fixed_effects <- unlist(strsplit(fixed_effects, ",", fixed = TRUE))
         # remove any fixed effects not found in metadata names
@@ -1401,7 +1383,9 @@ maaslin_compute_formula <- function(data,
             random_effects_formula_text <-
                 paste("expr ~ (1 | ",
                     paste(
-                        random_effects,
+                        ifelse(random_effects == make.names(random_effects), 
+                            random_effects, 
+                            paste0('`', random_effects, '`')),
                         ")",
                         sep = '',
                         collapse = " + (1 | "
@@ -1482,20 +1466,31 @@ maaslin_compute_formula <- function(data,
     metadata <- metadata[, effects_names, drop = FALSE]
 
     # create the fixed effects formula text
-    formula_effects <- fixed_effects
+    formula_effects <- ifelse(fixed_effects == make.names(fixed_effects), 
+        fixed_effects, 
+        paste0('`', fixed_effects, '`'))
     if (length(group_effects) > 0) {
         formula_effects <-
-            union(formula_effects, paste0("group(", group_effects, ")"))
+            union(formula_effects, paste0("group(", 
+                ifelse(group_effects == make.names(group_effects), 
+                group_effects, 
+                paste0('`', group_effects, '`')), ")"))
     }
     if (length(ordered_effects) > 0) {
         formula_effects <-
             union(formula_effects,
-                paste0("ordered(", ordered_effects, ")"))
+                paste0("ordered(", 
+                    ifelse(ordered_effects == make.names(ordered_effects), 
+                    ordered_effects, 
+                    paste0('`', ordered_effects, '`')), ")"))
     }
     if (length(strata_effects) > 0) {
         formula_effects <-
             union(formula_effects,
-                paste0("strata(", strata_effects, ")"))
+                paste0("strata(", 
+                    ifelse(strata_effects == make.names(strata_effects), 
+                        strata_effects, 
+                        paste0('`', strata_effects, '`')), ")"))
     }
     if (!is.null(feature_specific_covariate_name)) {
         formula_effects <-
@@ -1655,7 +1650,9 @@ maaslin_normalize <- function(data,
         data_norm_file <- file.path(features_folder, "data_norm.tsv")
         logging::loginfo("Writing normalized data to file %s", data_norm_file)
         write.table(
-            data.frame("feature" = rownames(features), features),
+            data.frame("feature" = rownames(features), 
+                        features, 
+                        check.names = FALSE),
             file = data_norm_file,
             sep = "\t",
             quote = FALSE,
@@ -1752,7 +1749,9 @@ maaslin_filter <- function(normalized_data,
         filtered_file <- file.path(features_folder, "filtered_data.tsv")
         logging::loginfo("Writing filtered data to file %s", filtered_file)
         write.table(
-            data.frame("feature" = rownames(filtered_data), filtered_data),
+            data.frame("feature" = rownames(filtered_data), 
+                        filtered_data, 
+                        check.names = FALSE),
             file = filtered_file,
             sep = "\t",
             quote = FALSE,
@@ -1783,6 +1782,9 @@ maaslin_process_metadata <- function(metadata,
         term_labels <- attr(terms(formula), "term.labels")
         term_labels <-
             term_labels[!grepl("group|ordered|strata|\\|", term_labels)]
+        if (length(term_labels) == 0) {
+            term_labels <- '1'
+        }
         tmp_formula <-
             formula(paste0("~ ", paste0(term_labels, collapse = " + ")))
         formula_terms <- all.vars(tmp_formula)
@@ -1901,7 +1903,9 @@ maaslin_transform <- function(filtered_data,
             filtered_data_norm_transformed_file
         )
         write.table(
-            data.frame("feature" = rownames(features), features),
+            data.frame("feature" = rownames(features), 
+                        features, 
+                        check.names = FALSE),
             file = filtered_data_norm_transformed_file,
             sep = "\t",
             quote = FALSE,
@@ -2129,6 +2133,22 @@ maaslin_fit <- function(filtered_data,
                         correction)
     fit_data_abundance$results <- results[[1]]
     fit_data_prevalence$results <- results[[2]]
+    fit_data_abundance$results <- fit_data_abundance$results %>%
+        dplyr::group_by(.data$name, .data$model) %>%
+        dplyr::mutate(null_hypothesis = 
+            ifelse(median_comparison_abundance & !subtract_median, 
+                median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
+                0)) %>%
+        dplyr::ungroup() %>%
+        as.data.frame()
+    fit_data_prevalence$results <- fit_data_prevalence$results %>%
+        dplyr::group_by(.data$name, .data$model) %>%
+        dplyr::mutate(null_hypothesis = 
+            ifelse(median_comparison_prevalence & !subtract_median, 
+                median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
+                0)) %>%
+        dplyr::ungroup() %>%
+        as.data.frame()
 
     # Warn about prevalence associations induced by abundances changes
     if (warn_prevalence) {
@@ -2191,6 +2211,7 @@ maaslin_fit <- function(filtered_data,
                             fit_data_prevalence,
                             correction)
         new_fit_data_abundance$results <- results[[1]]
+        new_fit_data_abundance$results$null_hypothesis <- 0
 
         results <-
             add_joint_signif(fit_data_abundance,
@@ -2233,7 +2254,8 @@ maaslin_fit <- function(filtered_data,
     }
 
     # Set column order
-    col_order <- c("feature", "metadata", "value", "name", "coef", "stderr",
+    col_order <- c("feature", "metadata", "value", "name", "coef", 
+                    "null_hypothesis", "stderr",
                     "pval_individual", "qval_individual", "pval_joint",
                     "qval_joint", "error", "model", "N", "N_not_zero")
 
@@ -2494,10 +2516,8 @@ maaslin_plot_results_from_output <- function(output,
         ))
     }
     merged_results <- utils::read.csv(all_results_file, sep = '\t')
-    merged_results$model[merged_results$model == 'abundance'] <-
-        'linear'
-    merged_results$model[merged_results$model == 'prevalence'] <-
-        'logistic'
+    merged_results$model[merged_results$model == 'abundance'] <- 'linear'
+    merged_results$model[merged_results$model == 'prevalence'] <- 'logistic'
 
     # Summary plot
     if (plot_summary_plot) {
@@ -2546,7 +2566,7 @@ maaslin_plot_results_from_output <- function(output,
             utils::read.csv(
                 features_file,
                 sep = '\t',
-                row.names = 1,
+                row.names = 1, 
                 check.names = FALSE
             )
 

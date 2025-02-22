@@ -94,9 +94,11 @@ pval_joint <- pbeta(pmin(merged_df$pval_individual.x,
 qval_joint <- p.adjust(pval_joint, 'BH')
 growing_df$pval_joint <- rep(pval_joint, 2)
 growing_df$qval_joint <- rep(qval_joint, 2)
+growing_df$null_hypothesis <- 0
 
-col_order <- c("feature", "metadata", "value", "name", "coef", "stderr", 
-               "pval_individual", "qval_individual", "pval_joint", 
+col_order <- c("feature", "metadata", "value", "name", "coef", 
+               "null_hypothesis", "stderr", "pval_individual", 
+               "qval_individual", "pval_joint", 
                "qval_joint", "error", "model", "N", "N_not_zero")
 growing_df <- growing_df[,col_order]
 growing_df <- growing_df[order(growing_df$qval_individual),]
