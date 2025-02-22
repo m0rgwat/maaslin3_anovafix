@@ -720,11 +720,6 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
         samples_column_row <-
             intersect(colnames(dna_table), rownames(rna_table))
         
-        if (length(samples_column_row) == 0) {
-            samples_column_row <-
-                intersect(colnames(dna_table), rownames(rna_table))
-        }
-        
         if (length(samples_column_row) > 0) {
             dna_table <- as.data.frame(t(dna_table))
         } else {
@@ -753,14 +748,6 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
     intersect_samples <-
         intersect(rownames(dna_table), rownames(rna_table))
     
-    # check for samples without RNA abundances
-    extra_dna_samples <-
-        setdiff(rownames(dna_table), intersect_samples)
-    
-    # check for samples without DNA abundances
-    extra_rna_samples <-
-        setdiff(rownames(rna_table), intersect_samples)
-    
     dna_table <- dna_table[intersect_samples, , drop = FALSE]
     rna_table <- rna_table[intersect_samples, , drop = FALSE]
     
@@ -781,20 +768,11 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
     })
     rna_table <- as.data.frame(rna_table)
     
-    
     # Transforming DNA table
     impute_val <- log2(min(dna_table[dna_table > 0]) / 2)
 
     intersect_features <-
         intersect(colnames(dna_table), colnames(rna_table))
-    
-    # check for features without RNA abundances
-    extra_dna_samples <-
-        setdiff(colnames(dna_table), intersect_features)
-    
-    # check for features without DNA abundances
-    extra_rna_samples <-
-        setdiff(colnames(rna_table), intersect_features)
     
     dna_table <- dna_table[, intersect_features, drop = FALSE]
     rna_table <- rna_table[, intersect_features, drop = FALSE]
@@ -807,6 +785,104 @@ preprocess_dna_mtx <- function(dna_table, rna_table) {
     # Transform DNA 0s as necessary
     dna_table <- log2(dna_table)
     dna_table[dna_table == -Inf & rna_table > 0] <- impute_val
+    dna_table[dna_table == -Inf & rna_table == 0] <- NA
+    
+    return(list("dna_table" = dna_table,
+                "rna_table" = rna_table))
+}
+
+###############################
+# Taxa pre-processing for MTX #
+###############################
+
+# rna_table must be samples (rows) by features (cols)
+preprocess_taxa_mtx <- function(taxa_table, rna_table, rna_per_taxon) {
+    if (any(colnames(rna_per_taxon) != c("RNA", 'taxon'))) {
+        stop("colnames of rna_per_taxon should be RNA and taxon")
+    }
+    
+    rna_vec <- c(unlist(rna_per_taxon[,'RNA']))
+    taxon_vec <- c(unlist(rna_per_taxon[,'taxon']))
+
+    samples_row_row <-
+        intersect(rownames(taxa_table), rownames(rna_table))
+    if (length(samples_row_row) == 0) {
+        samples_column_row <-
+            intersect(colnames(taxa_table), rownames(rna_table))
+        
+        if (length(samples_column_row) > 0) {
+            taxa_table <- as.data.frame(t(taxa_table))
+        } else {
+            stop(paste0(
+                paste0("Rows/columns do not match."),
+                paste0("Taxa rows: ",
+                    paste(rownames(taxa_table), collapse = ",")),
+                paste0("Taxa columns: ",
+                    paste(colnames(taxa_table), collapse = ",")),
+                paste0("RNA rows: ",
+                    paste(rownames(rna_table), collapse = ",")),
+                paste0("RNA columns: ",
+                    paste(colnames(rna_table), collapse = ",")),
+                collapse = '\n'
+            ))
+        }
+    }
+    intersect_samples <-
+        intersect(rownames(taxa_table), rownames(rna_table))
+    
+    taxa_table <- taxa_table[intersect_samples, , drop = FALSE]
+    rna_table <- rna_table[intersect_samples, , drop = FALSE]
+    
+    if (any(!colnames(rna_table) %in% rna_vec)) {
+        stop("rna_per_taxon RNA must contain all columns of rna_table")
+    }
+    if (any(!colnames(taxa_table) %in% taxon_vec)) {
+        stop("rna_per_taxon taxon must contain all columns of taxa_table")
+    }
+    
+    # At this point, taxa and RNA tables are 
+    # samples x features with same samples
+    
+    taxa_table <- TSSnorm(taxa_table, 0)
+    taxa_table <- apply(taxa_table, 2, function(x) {
+        x[is.na(x)] <- 0
+        return(x)
+    })
+    taxa_table <- as.data.frame(taxa_table)
+    
+    rna_table <- TSSnorm(rna_table, 0)
+    rna_table <- apply(rna_table, 2, function(x) {
+        x[is.na(x)] <- 0
+        return(x)
+    })
+    rna_table <- as.data.frame(rna_table)
+    
+    # Create a dna table by choosing the taxa to match the rna table
+    dna_table <- taxa_table[, 
+        plyr::mapvalues(colnames(rna_table), rna_vec, taxon_vec)]
+    colnames(dna_table) <- colnames(rna_table)
+
+    # Transforming DNA table
+    impute_val <- log2(min(dna_table[dna_table > 0]) / 2)
+    
+    if (!all(colnames(dna_table) == colnames(rna_table)) |
+        !all(rownames(dna_table) == rownames(rna_table))) {
+        stop("Something went wrong in preprocessing")
+    }
+    
+    # Transform DNA 0s as necessary
+    dna_table <- log2(dna_table)
+    
+    max_rna_table <- vapply(split(rna_per_taxon$RNA, rna_per_taxon$taxon), 
+        function(rna_cols) {
+            rna_cols <- rna_cols[rna_cols %in% colnames(rna_table)]
+            apply(rna_table[, rna_cols, drop = FALSE], 1, max, na.rm = TRUE)
+        }, FUN.VALUE = numeric(nrow(rna_table)))
+    max_rna_table <- max_rna_table[, 
+        plyr::mapvalues(colnames(rna_table), rna_vec, taxon_vec)]
+    colnames(max_rna_table) <- colnames(rna_table)
+
+    dna_table[dna_table == -Inf & max_rna_table > 0] <- impute_val
     dna_table[dna_table == -Inf & rna_table == 0] <- NA
     
     return(list("dna_table" = dna_table,

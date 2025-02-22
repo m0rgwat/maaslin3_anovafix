@@ -2304,7 +2304,7 @@ fit.model <- function(features,
                         expr = as.numeric(featuresVector),
                         feature_specific_covariate = covariateVector,
                         metadata, 
-                        check.names = FALSE,
+                        check.names = FALSE
                     )
                 
                 colnames(dat_sub)[colnames(dat_sub) == 

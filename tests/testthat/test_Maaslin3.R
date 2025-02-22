@@ -209,5 +209,21 @@ fit_out2 <- maaslin3(input_data = taxa_table,
 expect_that(fit_out$fit_data_abundance$results$coef,
             equals(fit_out2$fit_data_abundance$results$coef))
 
+fit_out <- maaslin3(input_data = taxa_table, 
+                    input_metadata = metadata, 
+                    output = output_tmp, 
+                    normalization = 'TSS', 
+                    transform = 'LOG', 
+                    formula = '~ diagnosis + `dysbiosis state` + antibiotics + age + reads', 
+                    save_models = FALSE, 
+                    plot_summary_plot = T, 
+                    plot_associations = T, 
+                    max_significance = 0.1, 
+                    augment = TRUE, 
+                    median_comparison_abundance = TRUE, 
+                    median_comparison_prevalence = FALSE, 
+                    cores=1, 
+                    verbosity = 'WARN')
+
 unlink(output_tmp, recursive = T)
 

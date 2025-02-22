@@ -724,8 +724,7 @@ maaslin3_summary_plot <-
                 })
             })
             
-            png_file <-
-                file.path(figures_folder, "summary_plot.png")
+            png_file <- file.path(figures_folder, "summary_plot.png")
             
             tryCatch({
                 withCallingHandlers({
@@ -1539,7 +1538,7 @@ maaslin3_association_plots <-
             if (save_plots_rds) {
                 saveRDS(saved_plots[[metadata_variable]], 
                         file = file.path(association_plots_folder, 
-                                        paste0(metadata_variable, 
+                                        paste0(make.names(metadata_variable), 
                                         "_gg_associations.RDS")))
             }
             
@@ -1553,7 +1552,8 @@ maaslin3_association_plots <-
                     
                     # Create the subfolder for the plot
                     association_plots_sub_folder <- file.path(
-                        association_plots_folder, metadata_variable, model_name)
+                        association_plots_folder, 
+                        make.names(metadata_variable), model_name)
                     if (!file.exists(association_plots_sub_folder)) {
                         dir.create(association_plots_sub_folder, 
                                     recursive = TRUE)
@@ -1561,8 +1561,8 @@ maaslin3_association_plots <-
                     
                     # Define the file path for saving the plot
                     png_file <- file.path(association_plots_sub_folder, 
-                                            paste0(metadata_variable, '_', 
-                                            feature, "_", model_name, ".png"))
+                        paste0(make.names(metadata_variable), '_', 
+                        make.names(feature), "_", model_name, ".png"))
                     
                     # Calculate height based on plot labels
                     height <- max(960, 18 * max(nchar(unlist(strsplit(
