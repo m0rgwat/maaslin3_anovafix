@@ -389,6 +389,8 @@ variable corresponds to a $2^{\textrm{coef}}$ fold change in the
 relative abundance of the feature. In prevalence models, a one-unit
 change in the metadatum variable corresponds to a $\textrm{coef}$ change
 in the log-odds of a feature being present.
+* `null_hypothesis` is the value of the null hypothesis against which 
+the coefficient is tested (zero or the per-metadatum median).
 * `pval_individual` and `qval_individual` are the p-value and false
 discovery rate (FDR) corrected q-value of the individual association.
 FDR correction is performed over all p-values without errors in the abundance

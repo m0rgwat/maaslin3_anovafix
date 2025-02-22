@@ -2,7 +2,7 @@
 ###############################################################################
 # MaAsLin3 visualizations
 
-# Copyright (c) 2024 Harvard School of Public Health
+# Copyright (c) 2025 Harvard School of Public Health
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -117,7 +117,7 @@ make_coef_plot <- function(merged_results_sig,
             upper_q = median(.data$coef) + plot_threshold * 
                 (quantile(.data$coef, 0.75) - median(.data$coef))
         ) %>%
-        data.frame()
+        data.frame(check.names = FALSE)
     rownames(quantile_df) <- quantile_df$full_metadata_name
     
     # Make sure insignificant coefficients don't distort the plot
@@ -493,8 +493,11 @@ maaslin3_summary_plot <-
         
         median_df <- merged_results %>%
             dplyr::group_by(.data$full_metadata_name, .data$model) %>%
-            dplyr::summarize(median_val = median(.data$coef), .groups = 'drop')
-        
+            dplyr::summarize(median_val = 
+                median(.data$coef[!is.na(.data$pval_individual) & 
+                        .data$pval_individual < 0.95]), 
+                .groups = 'drop')
+
         if (!median_comparison_abundance) {
             median_df$median_val[median_df$model == 'Abundance'] <- 0
         }
@@ -721,8 +724,7 @@ maaslin3_summary_plot <-
                 })
             })
             
-            png_file <-
-                file.path(figures_folder, "summary_plot.png")
+            png_file <- file.path(figures_folder, "summary_plot.png")
             
             tryCatch({
                 withCallingHandlers({
@@ -825,11 +827,11 @@ make_scatterplot <- function(joined_features_metadata_abun,
             label = sprintf(
             "FDR: %s\nCoefficient (in full model): %sN: %s\nN (not zero): %s",
                 formatC(qval, format = "e", digits = 1),
-                formatC(
+                ifelse(is.na(coef_val), 'NA', formatC(
                     coef_val,
                     format = "e",
                     digits = 1
-                ),
+                )),
                 formatC(
                     N_total,
                     format = 'f',
@@ -931,11 +933,11 @@ make_boxplot_lm <- function(joined_features_metadata_abun,
                     collapse = ', '
                 ),
                 paste0(
-                    formatC(
+                    ifelse(is.na(coef_val), 'NA', formatC(
                         coef_val,
                         format = "e",
                         digits = 1
-                    ),
+                    )),
                     collapse = ', '
                 )
             ) ,
@@ -1126,11 +1128,11 @@ make_boxplot_logistic <- function(joined_features_metadata_prev,
             label = sprintf(
             "FDR: %s\nCoefficient (in full model): %s\nN: %s\nN (not zero): %s",
                 formatC(qval, format = "e", digits = 1),
-                formatC(
+                ifelse(is.na(coef_val), 'NA', formatC(
                     coef_val,
                     format = "e",
                     digits = 1
-                ),
+                )),
                 formatC(
                     N_total,
                     format = 'f',
@@ -1241,11 +1243,11 @@ make_tile_plot <- function(joined_features_metadata_prev,
                     collapse = ', '
                 ),
                 paste0(
-                    formatC(
+                    ifelse(is.na(coef_val), 'NA', formatC(
                         coef_val,
                         format = "e",
                         digits = 1
-                    ),
+                    )),
                     collapse = ', '
                 )
             ) ,
@@ -1460,8 +1462,10 @@ maaslin3_association_plots <-
         # Iterate through associations to make plots
         for (row_num in seq(min(nrow(features_by_metadata), max_pngs))) {
             feature_name <- features_by_metadata[row_num, 'feature']
-            feature_abun <- data.frame(sample = rownames(features),
-                                    feature_abun = features[, feature_name])
+            feature_abun <- data.frame(
+                sample = rownames(features),
+                feature_abun = features[, feature_name], 
+                check.names = FALSE)
             
             metadata_name <- features_by_metadata[row_num, 'metadata']
             if (!is.null(feature_specific_covariate_name)) {
@@ -1470,16 +1474,19 @@ maaslin3_association_plots <-
                         data.frame(
                             sample = rownames(feature_specific_covariate),
                             metadata = feature_specific_covariate[, 
-                                                                feature_name]
+                                                                feature_name],
+                            check.names = FALSE
                         )
                 } else {
                     metadata_sub <- data.frame(sample = rownames(metadata),
                                             metadata = 
-                                                metadata[, metadata_name])
+                                                metadata[, metadata_name], 
+                                            check.names = FALSE)
                 }
             } else {
                 metadata_sub <- data.frame(sample = rownames(metadata),
-                                        metadata = metadata[, metadata_name])
+                                        metadata = metadata[, metadata_name], 
+                                        check.names = FALSE)
             }
             joined_features_metadata <-
                 dplyr::inner_join(feature_abun, metadata_sub, by = c('sample'))
@@ -1531,7 +1538,7 @@ maaslin3_association_plots <-
             if (save_plots_rds) {
                 saveRDS(saved_plots[[metadata_variable]], 
                         file = file.path(association_plots_folder, 
-                                        paste0(metadata_variable, 
+                                        paste0(make.names(metadata_variable), 
                                         "_gg_associations.RDS")))
             }
             
@@ -1545,7 +1552,8 @@ maaslin3_association_plots <-
                     
                     # Create the subfolder for the plot
                     association_plots_sub_folder <- file.path(
-                        association_plots_folder, metadata_variable, model_name)
+                        association_plots_folder, 
+                        make.names(metadata_variable), model_name)
                     if (!file.exists(association_plots_sub_folder)) {
                         dir.create(association_plots_sub_folder, 
                                     recursive = TRUE)
@@ -1553,8 +1561,8 @@ maaslin3_association_plots <-
                     
                     # Define the file path for saving the plot
                     png_file <- file.path(association_plots_sub_folder, 
-                                            paste0(metadata_variable, '_', 
-                                            feature, "_", model_name, ".png"))
+                        paste0(make.names(metadata_variable), '_', 
+                        make.names(feature), "_", model_name, ".png"))
                     
                     # Calculate height based on plot labels
                     height <- max(960, 18 * max(nchar(unlist(strsplit(

@@ -39,8 +39,7 @@ preprocess_dna_mtx(dna_table, rna_table)
 }
 \arguments{
 \item{dna_table}{The samples (rows) by features (columns) data frame of
-DNA or
-taxon abundances to preprocess. These can be relative abundances or
+DNA abundances to preprocess. These can be relative abundances or
 counts.}
 \item{rna_table}{The samples (rows) by features (columns) data frame of
 RNA to
