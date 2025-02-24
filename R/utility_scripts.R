@@ -315,8 +315,10 @@ write_results <- function(output,
     ###########################################
     
     significant_results <-
-        fit_data[fit_data$qval_joint <= max_significance | 
-                    fit_data$qval_individual <= max_significance &
+        fit_data[(fit_data$qval_joint <= max_significance &
+                      !is.na(fit_data$qval_joint)) | 
+                    (fit_data$qval_individual <= max_significance &
+                         !is.na(fit_data$qval_individual)) &
                     is.na(fit_data$error),]
     significant_results$error <- NULL
     significant_results_file <-
