@@ -866,21 +866,34 @@ interested in testing the effect of time in a longitudinal study, the
 time point variable should be included as a fixed effect in your MaAsLin
 3 formula.
 
-Mixed effects models take longer to fit because of their complexity, and
-the fitting may fail more often because of the extra terms. However, it
-is important to account for this non-independence, and MaAsLin 3 is
-still able to fit complex models with thousands of samples and thousands
-of features in a few hours (and increasing the CPUs used with `cores`
-can help). However, random effects are not the solution to every
-correlated data problem. In particular, **logistic random intercept models may
-produce poor model fits when there are fewer than 5 observations per
-group.** In these scenarios, per-group fixed effects or, for advanced users,
-conditional 
-logistic regression (see `strata_effects` in the manual) should be used. For
-example, in a before-and-after treatment study with one sample before
-and one sample after, the participant IDs and a pre/post indicator
-should be included as fixed effects or a `strata` variable, but only the 
-pre/post indicator should be retained for analysis afterwards.
+#### Alternatives to random effects
+
+Random effects are not the solution to every correlated data problem. In 
+particular, **logistic random intercept models may produce poor model fits 
+when there are fewer than 4 average observations per random effect group.** The
+fit coefficients can be large in magnitude and very significant while
+modeling the data poorly. By default, a warning will be added to the `error`
+column of the outputs in these scenarios. This warning can be disregarded
+if the user is confident the model is fit correctly, but recommendations
+are provided in the table below:
+
+| Scenario |$\geq4$ average observations per group|$<4$ average observations\
+per group, metadata not collinear with the groups |$<4$ average observations\
+per group, metadata collinear with the groups|
+|----|----|-----|------|
+| Example   | Subjects sampled $\geq4$ times | Subjects sampled once before \
+and once after treatment | Subjects have fixed disease status \
+and are sampled twice (disease \
+status is constant per-subject, so collinear with the grouping) |
+| Action   | Use random effects with  `small_random_effects=FALSE` \
+(default) | Use random effects for abundance but fixed effects for \
+prevalence by setting `small_random_effects=TRUE` | Subset or average data to \
+one observation per group |
+| Reason | Random effects are robust and \
+increase power  | Prevalence random effects are not robust but fixed effects \
+are robust and control for grouping | Prevalence random effects are \
+not robust and fixed effects cannot be used when groups are \
+collinear with the metadata |
 
 ### 4.3 Interactions (differences in differences) {#interactions}
 

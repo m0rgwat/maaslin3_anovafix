@@ -284,9 +284,15 @@ write_results <- function(output,
             TRUE ~ NA
         )
     
+    small_random_effects_warning <- 
+        paste0("<4 average observations per random effect group often inflates",
+            " coefficients and deflates p-values: consider setting ",
+            "small_random_effects=TRUE and see tutorial")
+    
     fit_data <- fit_data[order(fit_data$qval_individual), ]
     # Move all that had errors to the end
-    fit_data <- fit_data[order(!is.na(fit_data$error)), ] 
+    fit_data <- fit_data[order(!is.na(fit_data$error) & 
+        fit_data$error != small_random_effects_warning), ] 
     
     #############################
     # Write all results to file #
@@ -316,11 +322,11 @@ write_results <- function(output,
     
     significant_results <-
         fit_data[(fit_data$qval_joint <= max_significance &
-                      !is.na(fit_data$qval_joint)) | 
+                    !is.na(fit_data$qval_joint)) | 
                     (fit_data$qval_individual <= max_significance &
-                         !is.na(fit_data$qval_individual)) &
-                    is.na(fit_data$error),]
-    significant_results$error <- NULL
+                    !is.na(fit_data$qval_individual)) &
+                    (is.na(fit_data$error) | 
+                    fit_data$error == small_random_effects_warning),]
     significant_results_file <-
         file.path(output, "significant_results.tsv")
     

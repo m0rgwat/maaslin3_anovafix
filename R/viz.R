@@ -72,6 +72,9 @@ preprocess_merged_results <- function(merged_results) {
     # Disregard abundance-induced-prevalence errors in plotting
     merged_results$error[grepl("Prevalence association possibly induced", 
                                 merged_results$error)] <- NA
+    # Disregard small random effect group warning
+    merged_results$error[grepl("<4 average observations per random effect", 
+        merged_results$error)] <- NA
     
     merged_results <-
         merged_results[is.na(merged_results$error) &
@@ -1421,6 +1424,9 @@ maaslin3_association_plots <-
         
         # Disregard abundance-induced-prevalence errors in plotting
         merged_results$error[grepl("Prevalence association possibly induced", 
+                                    merged_results$error)] <- NA
+        # Disregard small random effect group warning
+        merged_results$error[grepl("<4 average observations per random effect", 
                                     merged_results$error)] <- NA
         
         new_name_normalization <-

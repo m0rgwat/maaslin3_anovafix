@@ -105,6 +105,7 @@ args$median_comparison_abundance_threshold <- 0
 args$median_comparison_prevalence_threshold <- 0
 args$subtract_median <- FALSE
 args$warn_prevalence <- TRUE
+args$small_random_effects <- FALSE
 args$augment <- TRUE
 args$evaluate_only <- NULL
 args$unscaled_abundance <- NULL
@@ -454,6 +455,18 @@ options <-
 options <-
     optparse::add_option(
         options,
+        c("--small_random_effects"),
+        type = "logical",
+        dest = "small_random_effects",
+        default = args$small_random_effects,
+        help = paste(
+            "Replace prevalence random effects with",
+            "fixed effects because groups are small [ Default: %default ]"
+        )
+    )
+options <-
+    optparse::add_option(
+        options,
         c("--augment"),
         type = "logical",
         dest = "augment",
@@ -781,6 +794,7 @@ maaslin_log_arguments <- function(input_data,
                                 median_comparison_prevalence_threshold = 0,
                                 subtract_median = FALSE,
                                 warn_prevalence = TRUE,
+                                small_random_effects = FALSE,
                                 augment = TRUE,
                                 evaluate_only = NULL,
                                 plot_summary_plot = TRUE,
@@ -897,6 +911,10 @@ maaslin_log_arguments <- function(input_data,
     logging::logdebug(
         "Warn prevalence: %s",
         warn_prevalence
+    )
+    logging::logdebug(
+        "Small random effects: %s",
+        small_random_effects
     )
     logging::logdebug("Augment: %s", augment)
     logging::logdebug("Evaluate only: %s", evaluate_only)
@@ -1937,6 +1955,7 @@ maaslin_fit <- function(filtered_data,
                         median_comparison_prevalence_threshold = 0,
                         subtract_median = FALSE,
                         warn_prevalence = TRUE,
+                        small_random_effects = FALSE,
                         augment = TRUE,
                         evaluate_only = NULL,
                         cores = 1,
@@ -1982,6 +2001,7 @@ maaslin_fit <- function(filtered_data,
                 random_effects_formula = random_effects_formula,
                 correction = correction,
                 save_models = save_models,
+                small_random_effects = small_random_effects,
                 augment = augment,
                 cores = cores,
                 median_comparison = median_comparison_abundance,
@@ -2037,6 +2057,7 @@ maaslin_fit <- function(filtered_data,
                 random_effects_formula = random_effects_formula,
                 correction = correction,
                 save_models = save_models,
+                small_random_effects = small_random_effects,
                 augment = augment,
                 cores = cores,
                 median_comparison = median_comparison_prevalence,
@@ -2133,23 +2154,28 @@ maaslin_fit <- function(filtered_data,
                         correction)
     fit_data_abundance$results <- results[[1]]
     fit_data_prevalence$results <- results[[2]]
-    fit_data_abundance$results <- fit_data_abundance$results %>%
-        dplyr::group_by(.data$name, .data$model) %>%
-        dplyr::mutate(null_hypothesis = 
-            ifelse(median_comparison_abundance & !subtract_median, 
-                median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
-                0)) %>%
-        dplyr::ungroup() %>%
-        as.data.frame()
-    fit_data_prevalence$results <- fit_data_prevalence$results %>%
-        dplyr::group_by(.data$name, .data$model) %>%
-        dplyr::mutate(null_hypothesis = 
-            ifelse(median_comparison_prevalence & !subtract_median, 
-                median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
-                0)) %>%
-        dplyr::ungroup() %>%
-        as.data.frame()
-
+    if (!is.null(fit_data_abundance)) {
+        fit_data_abundance$results <- fit_data_abundance$results %>%
+            dplyr::group_by(.data$name, .data$model) %>%
+            dplyr::mutate(null_hypothesis = 
+                ifelse(median_comparison_abundance & !subtract_median, 
+                    median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
+                    0)) %>%
+            dplyr::ungroup() %>%
+            as.data.frame()
+    }
+    if (!is.null(fit_data_prevalence)) {
+        fit_data_prevalence$results <- fit_data_prevalence$results %>%
+            dplyr::group_by(.data$name, .data$model) %>%
+            dplyr::mutate(null_hypothesis = 
+                ifelse(median_comparison_prevalence & !subtract_median, 
+                    median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
+                    0)) %>%
+            dplyr::ungroup() %>%
+            as.data.frame()
+        
+    }
+    
     # Warn about prevalence associations induced by abundances changes
     if (warn_prevalence) {
         logging::loginfo("Re-running abundances for warn_prevalence")
@@ -2195,6 +2221,7 @@ maaslin_fit <- function(filtered_data,
                 random_effects_formula = random_effects_formula,
                 correction = correction,
                 save_models = save_models,
+                small_random_effects = small_random_effects,
                 augment = augment,
                 cores = cores,
                 median_comparison = FALSE,
@@ -2250,6 +2277,26 @@ maaslin_fit <- function(filtered_data,
                 fit_data_prevalence$results %>%
                 dplyr::rename(pval_individual = .data$pval,
                             qval_individual = .data$qval)
+        }
+    }
+    
+    if (!is.null(fit_data_prevalence)) {
+        if (!is.null(random_effects_formula)) {
+            bars <- lme4::findbars(random_effects_formula)
+            random_names <- vapply(bars, function(x) deparse(x[[3]]), 
+                FUN.VALUE = character(length(bars)))
+            for (random_name in random_names) {
+                random_table <- table(metadata[random_name])
+                random_table <- random_table[random_table > 0]
+                if (mean(random_table) < 4 & !small_random_effects) {
+                    fit_data_prevalence$results$error <- 
+                        ifelse(is.na(fit_data_prevalence$results$error),
+    paste0("<4 average observations per random effect group often inflates ",
+        "coefficients and deflates p-values: consider setting ",
+        "small_random_effects=TRUE and see tutorial"), 
+    fit_data_prevalence$results$error)
+                }
+            }
         }
     }
 
@@ -2667,6 +2714,7 @@ maaslin3 <- function(input_data,
                     median_comparison_prevalence_threshold = 0,
                     subtract_median = FALSE,
                     warn_prevalence = TRUE,
+                    small_random_effects = FALSE,
                     augment = TRUE,
                     evaluate_only = NULL,
                     plot_summary_plot = TRUE,
@@ -2737,6 +2785,7 @@ maaslin3 <- function(input_data,
         median_comparison_prevalence_threshold,
         subtract_median,
         warn_prevalence,
+        small_random_effects,
         augment,
         evaluate_only,
         plot_summary_plot,
@@ -2845,6 +2894,7 @@ maaslin3 <- function(input_data,
         median_comparison_prevalence_threshold,
         subtract_median,
         warn_prevalence,
+        small_random_effects,
         augment,
         evaluate_only,
         cores,
@@ -2976,6 +3026,7 @@ if (identical(environment(), globalenv()) &&
                 current_args$median_comparison_prevalence_threshold,
             subtract_median = current_args$subtract_median,
             warn_prevalence = current_args$warn_prevalence,
+            small_random_effects = current_args$small_random_effects,
             formula = current_args$formula,
             correction = current_args$correction,
             standardize = current_args$standardize,
