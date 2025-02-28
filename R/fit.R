@@ -2207,6 +2207,7 @@ fit.model <- function(features,
                     random_effects_formula = NULL,
                     correction = "BH",
                     save_models = FALSE,
+                    small_random_effects = FALSE,
                     augment = FALSE,
                     cores = 1,
                     median_comparison = FALSE,
@@ -2232,6 +2233,28 @@ fit.model <- function(features,
     extract_out <- extract_special_predictor(formula, 'strata')
     formula <- extract_out[[1]]
     strata <- extract_out[[2]]
+    
+    if (small_random_effects & model == 'logistic') {
+        fixed_part <- lme4::nobars(formula)
+        random_terms <- lme4::findbars(formula)
+        if (length(random_terms) > 0) {
+            grouping <- unique(
+                vapply(random_terms, function(x) deparse(x[[3]]), 
+                    FUN.VALUE = character(length(random_terms))))
+            grouping <- ifelse(grouping == make.names(grouping),
+                grouping, paste0('`', grouping, '`'))
+            new_formula <- as.formula(
+                paste(deparse(fixed_part), "+", 
+                    paste(grouping, collapse = " + ")),
+                env = environment(formula)
+            )
+            environment(new_formula) <- environment(formula)
+            formula <- new_formula
+        } else {
+            stop("small_random_effects=TRUE but no random effects specified")
+        }
+        random_effects_formula <- NULL
+    }
     
     if (length(strata) > 0 & !is.null(random_effects_formula)){
         stop(
@@ -2264,7 +2287,6 @@ fit.model <- function(features,
             strata = strata,
             augment = augment)
     }
-    
     
     ranef_function <- fun_list$ranef_function
     model_function <- fun_list$model_function
@@ -2593,6 +2615,10 @@ fit.model <- function(features,
             paras <-
                 paras[!grepl(feature_specific_covariate_name, paras$name),]
         }
+    }
+    
+    if (small_random_effects & model == 'logistic') {
+        paras <- paras[!paras$metadata %in% trimws(grouping, whitespace = '`'),]
     }
     
     ##############################

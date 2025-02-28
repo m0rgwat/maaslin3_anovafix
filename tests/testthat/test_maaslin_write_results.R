@@ -55,7 +55,7 @@ results_combined <- results_combined[results_combined$qval_joint < 0.1 |
                                     results_combined$qval_individual < 0.1,]
 rownames(results_combined) <- NULL
 
-results_combined$error <- NULL
+results_combined$error <- as.logical(results_combined$error)
 expect_equal(results_combined, signif_results)
 
 unlink(output_tmp, recursive = T)

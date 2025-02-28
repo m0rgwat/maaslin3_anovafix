@@ -37,6 +37,7 @@ maaslin_log_arguments(input_data,
                     median_comparison_prevalence_threshold = 0,
                     subtract_median = FALSE,
                     warn_prevalence = TRUE,
+                    small_random_effects = FALSE,
                     augment = TRUE,
                     evaluate_only = NULL,
                     plot_summary_plot = TRUE,
@@ -164,6 +165,9 @@ maaslin_log_arguments(input_data,
     \item{warn_prevalence}{Warn when prevalence associations are likely
     induced by abundance associations. This requires re-fitting the linear
     models on the TSS log-transformed data.}
+    \item{small_random_effects}{Automatically replace random effects with 
+    fixed effects in the logistic prevalence model to handle low numbers
+    of observations per group.}
     \item{augment}{Add extra lowly-weighted 0s and 1s to avoid linear
     separability.}
     \item{evaluate_only}{Whether to evaluate just the abundnace

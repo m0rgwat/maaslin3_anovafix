@@ -201,7 +201,7 @@ contains all the data and results (see `?maaslin_fit`).
     * ``significant_results.tsv``
         * This file is a subset of the results in the first file.
         * It only includes associations with joint or individual q-values less 
-than or equal to the threshold and no errors.
+than or equal to the threshold.
     * ``features``
         * This folder includes the filtered, normalized, and transformed
         versions of the input feature table.
@@ -714,6 +714,9 @@ are likely induced by abundance associations. This requires re-fitting the
 linear models on the TSS log-transformed data. A prevalence coefficient is
 flagged if its corresponding abundance coefficient is significantly different
 from 0, of the same sign, and larger in absolute value.
+* `small_random_effects` (default `FALSE`): Automatically replace random 
+effects with fixed effects in the logistic prevalence model to handle low 
+numbers of observations per group.
 * `augment` (default `TRUE`): To avoid linear separability in the
 logistic regression, at each input data point, add an extra 0 and an
 extra 1 observation weighted as the number of predictors divided by two
