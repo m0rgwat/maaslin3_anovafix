@@ -1130,7 +1130,7 @@ fit_out <- maaslin3(input_data = taxa_table,
                     input_metadata = metadata,
                     output = 'contrast_test_output',
                     formula = '~ diagnosis + dysbiosis_state +
-                        antibiotics + age + reads + (1|participant_id)',
+                        antibiotics + age + reads',
                     plot_summary_plot = FALSE,
                     plot_associations = FALSE,
                     cores = 1)
