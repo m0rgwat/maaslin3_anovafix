@@ -22,13 +22,13 @@ rownames(metadata) <- paste0("sample", c(1:5))
 output_tmp <- tempfile()
 dir.create(output_tmp)
 write.table(data_in, file.path(output_tmp, 'data.tsv'), 
-            row.names = T, sep = '\t')
+            row.names = T, sep = '\t', col.names=NA)
 write.table(metadata, file.path(output_tmp, 'metadata.tsv'), 
-            row.names = T, sep = '\t')
+            row.names = T, sep = '\t', col.names=NA)
 write.table(covar_data, file.path(output_tmp, 'covar.tsv'), 
-            row.names = T, sep = '\t')
+            row.names = T, sep = '\t', col.names=NA)
 write.table(unscaled, file.path(output_tmp, 'unscaled.tsv'), 
-            row.names = T, sep = '\t')
+            row.names = T, sep = '\t', col.names=NA)
 
 data_in_new <- maaslin_read_data(input_data = file.path(output_tmp, 'data.tsv'), 
                 input_metadata = file.path(output_tmp, 'metadata.tsv'), 

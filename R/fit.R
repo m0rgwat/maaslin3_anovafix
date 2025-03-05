@@ -2110,6 +2110,7 @@ run_median_comparison <- function(paras,
     
     final_paras <-
         paras[!is.na(paras$error) | paras$name %in% groups,]
+    final_paras$null_hypothesis <- rep(NA, nrow(final_paras))
     paras <-
         paras[is.na(paras$error) & !paras$name %in% groups,]
     
@@ -2176,6 +2177,7 @@ run_median_comparison <- function(paras,
         
         paras_sub$pval <- pvals_new
         paras_sub$coef <- coefs_new
+        paras_sub$null_hypothesis <- cur_median
         
         return(paras_sub)
     }
@@ -2307,215 +2309,225 @@ fit.model <- function(features,
     ##############################
     # Apply per-feature modeling #
     ##############################
-    outputs <-
-        pbapply::pblapply(seq_len(ncol(features)), cl = cluster, function(x) {
-            # Extract Features One by One
-            featuresVector <- features[, x]
+    func_to_run <- function(x) {
+        # Extract Features One by One
+        featuresVector <- features[, x]
+        
+        logging::loginfo("Fitting model to feature number %d, %s",
+                        x,
+                        colnames(features)[x])
+        
+        # Make fitting matrix of features and metadata
+        if (!is.null(feature_specific_covariate)) {
+            covariateVector <- feature_specific_covariate[, x]
             
-            logging::loginfo("Fitting model to feature number %d, %s",
-                            x,
-                            colnames(features)[x])
+            dat_sub <-
+                data.frame(
+                    expr = as.numeric(featuresVector),
+                    feature_specific_covariate = covariateVector,
+                    metadata, 
+                    check.names = FALSE
+                )
             
-            # Make fitting matrix of features and metadata
-            if (!is.null(feature_specific_covariate)) {
-                covariateVector <- feature_specific_covariate[, x]
+            colnames(dat_sub)[colnames(dat_sub) == 
+                            'feature_specific_covariate'] <-
+                feature_specific_covariate_name
+        } else {
+            dat_sub <- data.frame(expr = 
+                as.numeric(featuresVector), metadata, 
+                check.names = FALSE)
+        }
+        
+        # 0 or 1 observations
+        zero_one_out <- check_for_zero_one_obs(formula,
+            random_effects_formula,
+            dat_sub,
+            groups,
+            ordereds,
+            features,
+            x,
+            model,
+            feature_specific_covariate_name)
+        
+        if (!is.null(zero_one_out)) {
+            return(zero_one_out)
+        }
+        
+        # Missing first factor level
+        check_out <- check_missing_first_factor_level(formula,
+            random_effects_formula,
+            dat_sub,
+            groups,
+            ordereds,
+            features,
+            x,
+            feature_specific_covariate_name)
+        
+        if (!is.null(check_out)) {
+            return(check_out)
+        }
+        
+        # Augment logistic fitting
+        if (augment &
+            model == "logistic" &
+            length(unique(featuresVector)) >= 2) {
+            fitting_out <- fit_augmented_logistic(
+                ranef_function,
+                model_function,
+                formula,
+                random_effects_formula,
+                groups,
+                ordereds,
+                dat_sub,
+                features,
+                x)
+        } else { # linear or non-augmented logistic
+            fitting_out <- non_augmented(
+                ranef_function,
+                model_function,
+                formula,
+                random_effects_formula,
+                groups,
+                ordereds,
+                dat_sub,
+                features,
+                x)
+        }
+        
+        fit_and_message <- fitting_out[["fit_and_message"]]
+        weight_scheme <- fitting_out[["weight_scheme"]]
+        mm_input <- fitting_out[["mm_input"]]
+        
+        fit <- fit_and_message[[1]]
+        
+        # Gather Output
+        output <- list()
+        
+        # Check for fitting errors and add on special predictors
+        low_n_error <- FALSE
+        if (all(!inherits(fit, "try-error"))) {
+            names_to_include <-
+                get_fixed_effects(formula,
+                    random_effects_formula,
+                    dat_sub,
+                    character(0),
+                    character(0),
+                    feature_specific_covariate_name)
+            # Suppress warnings about variance-covariance matrix calculation
+            fit_properly <- FALSE
+            withCallingHandlers({
+                tryCatch({
+                    output$para <-
+                        summary_function(fit, c('(Intercept)', 
+                                            names_to_include))
+                    fit_properly <- TRUE
+                }, error = function(e) {
+                    return()
+                })
+            }, warning = function(w) {
+                invokeRestart("muffleWarning")
+            })
+            
+            if (fit_properly) {
+                output$para <-
+                    output$para[names_to_include, , drop = FALSE]
                 
-                dat_sub <-
-                    data.frame(
-                        expr = as.numeric(featuresVector),
-                        feature_specific_covariate = covariateVector,
-                        metadata, 
-                        check.names = FALSE
-                    )
+                n_uni_cols <- nrow(output$para)
                 
-                colnames(dat_sub)[colnames(dat_sub) == 
-                                    'feature_specific_covariate'] <-
-                    feature_specific_covariate_name
-            } else {
-                dat_sub <- data.frame(expr = 
-                                        as.numeric(featuresVector), metadata, 
-                                        check.names = FALSE)
-            }
-            
-            # 0 or 1 observations
-            zero_one_out <- check_for_zero_one_obs(formula,
-                                    random_effects_formula,
-                                    dat_sub,
-                                    groups,
-                                    ordereds,
-                                    features,
-                                    x,
-                                    model,
-                                    feature_specific_covariate_name)
-            
-            if (!is.null(zero_one_out)) {
-                return(zero_one_out)
-            }
-            
-            # Missing first factor level
-            check_out <- check_missing_first_factor_level(formula,
-                                            random_effects_formula,
-                                            dat_sub,
+                if (length(groups) > 0) {
+                    output <- run_group_models(ranef_function,
+                                            model_function,
                                             groups,
-                                            ordereds,
-                                            features,
-                                            x,
-                                            feature_specific_covariate_name)
-            
-            if (!is.null(check_out)) {
-                return(check_out)
-            }
-            
-            # Augment logistic fitting
-            if (augment &
-                model == "logistic" &
-                length(unique(featuresVector)) >= 2) {
-                fitting_out <- fit_augmented_logistic(
-                    ranef_function,
-                    model_function,
-                    formula,
-                    random_effects_formula,
-                    groups,
-                    ordereds,
-                    dat_sub,
-                    features,
-                    x)
-            } else { # linear or non-augmented logistic
-                fitting_out <- non_augmented(
-                    ranef_function,
-                    model_function,
-                    formula,
-                    random_effects_formula,
-                    groups,
-                    ordereds,
-                    dat_sub,
-                    features,
-                    x)
-            }
-            
-            fit_and_message <- fitting_out[["fit_and_message"]]
-            weight_scheme <- fitting_out[["weight_scheme"]]
-            mm_input <- fitting_out[["mm_input"]]
-            
-            fit <- fit_and_message[[1]]
-            
-            # Gather Output
-            output <- list()
-            
-            # Check for fitting errors and add on special predictors
-            low_n_error <- FALSE
-            if (all(!inherits(fit, "try-error"))) {
+                                            formula,
+                                            random_effects_formula,
+                                            model,
+                                            fit,
+                                            augment,
+                                            weight_scheme,
+                                            dat_sub,
+                                            output,
+                                            mm_input)
+                }
+                
+                if (length(ordereds) > 0) {
+                    output <- run_ordered_models(ranef_function,
+                                                model_function,
+                                                ordereds,
+                                                fit_and_message,
+                                                formula,
+                                                random_effects_formula,
+                                                model,
+                                                fit,
+                                                augment,
+                                                weight_scheme,
+                                                dat_sub,
+                                                output)
+                }
+                
+                # Check whether summaries are correct
                 names_to_include <-
                     get_fixed_effects(formula,
                                     random_effects_formula,
                                     dat_sub,
-                                    character(0),
-                                    character(0),
-                                    feature_specific_covariate_name)
-                # Suppress warnings about variance-covariance matrix calculation
-                fit_properly <- FALSE
-                withCallingHandlers({
-                    tryCatch({
-                        output$para <-
-                            summary_function(fit, c('(Intercept)', 
-                                                    names_to_include))
-                        fit_properly <- TRUE
-                    }, error = function(e) {
-                        return()
-                    })
-                }, warning = function(w) {
-                    invokeRestart("muffleWarning")
-                })
-                
-                if (fit_properly) {
-                    output$para <-
-                        output$para[names_to_include, , drop = FALSE]
-                    
-                    n_uni_cols <- nrow(output$para)
-                    
-                    if (length(groups) > 0) {
-                        output <- run_group_models(ranef_function,
-                                                    model_function,
-                                                    groups,
-                                                    formula,
-                                                    random_effects_formula,
-                                                    model,
-                                                    fit,
-                                                    augment,
-                                                    weight_scheme,
-                                                    dat_sub,
-                                                    output,
-                                                    mm_input)
-                    }
-                    
-                    if (length(ordereds) > 0) {
-                        output <- run_ordered_models(ranef_function,
-                                                    model_function,
-                                                    ordereds,
-                                                    fit_and_message,
-                                                    formula,
-                                                    random_effects_formula,
-                                                    model,
-                                                    fit,
-                                                    augment,
-                                                    weight_scheme,
-                                                    dat_sub,
-                                                    output)
-                    }
-                    
-                    # Check whether summaries are correct
-                    names_to_include <-
-                        get_fixed_effects(formula,
-                                            random_effects_formula,
-                                            dat_sub,
-                                            groups,
-                                            ordereds,
-                                            feature_specific_covariate_name)
-                    if (any(!(names_to_include %in% rownames(output$para)))) {
-                        # Don't worry about dropped factor levels
-                        missing_names <- names_to_include[
-                            !(names_to_include %in% rownames(output$para))]
-                        character_cols <- get_character_cols(dat_sub)
-                        if (!all(missing_names %in% character_cols)) {
-                            fit_properly <- FALSE
-                            fit_and_message[[length(fit_and_message)]] <-
-                            "Metadata dropped during fitting (rank deficient)"
-                        } else {
-                            fit_properly <- TRUE
-                        }
-                    } else {
-                        # No errors, summaries are correct
-                        fit_properly <- TRUE
-                    }
-                    
-                    # Prevents individual group levels from ending up in results
-                    output$para <-
-                    output$para[rownames(output$para) %in% names_to_include,]
-                }
-            } else {
-                # Fit issue occurred
-                fit_properly <- FALSE
-            }
-            
-            output <- fitting_wrap_up(fit_properly,
-                                    fit_and_message,
-                                    output,
-                                    fit,
-                                    random_effects_formula,
-                                    metadata,
-                                    median_comparison,
-                                    save_models,
-                                    formula,
-                                    dat_sub,
                                     groups,
                                     ordereds,
-                                    features,
-                                    x,
-                                    ranef_function,
                                     feature_specific_covariate_name)
-            
-            return(output)
-        })
+                if (any(!(names_to_include %in% rownames(output$para)))) {
+                    # Don't worry about dropped factor levels
+                    missing_names <- names_to_include[
+                        !(names_to_include %in% rownames(output$para))]
+                    character_cols <- get_character_cols(dat_sub)
+                    if (!all(missing_names %in% character_cols)) {
+                        fit_properly <- FALSE
+                        fit_and_message[[length(fit_and_message)]] <-
+                            "Metadata dropped during fitting (rank deficient)"
+                    } else {
+                        fit_properly <- TRUE
+                    }
+                } else {
+                    # No errors, summaries are correct
+                    fit_properly <- TRUE
+                }
+                
+                # Prevents individual group levels from ending up in results
+                output$para <-
+                    output$para[rownames(output$para) %in% names_to_include,]
+            }
+        } else {
+            # Fit issue occurred
+            fit_properly <- FALSE
+        }
+        
+        output <- fitting_wrap_up(fit_properly,
+                                fit_and_message,
+                                output,
+                                fit,
+                                random_effects_formula,
+                                metadata,
+                                median_comparison,
+                                save_models,
+                                formula,
+                                dat_sub,
+                                groups,
+                                ordereds,
+                                features,
+                                x,
+                                ranef_function,
+                                feature_specific_covariate_name)
+        
+        return(output)
+    }
+    
+    env_objects <- ls(environment(func_to_run))
+    for (obj in env_objects) {
+        size <- pryr::object_size(get(obj, envir = environment(func_to_run)))
+        logging::logdebug(paste0("Object: ", obj, ", Size: ", size))
+    }
+    size <- pryr::object_size(func_to_run)
+    logging::logdebug(paste0("Object: ", "func_to_run", ", Size: ", size))
+
+    outputs <-
+        pbapply::pblapply(seq_len(ncol(features)), cl = cluster, func_to_run)
     
     # stop the cluster
     if (!is.null(cluster))
@@ -2556,6 +2568,8 @@ fit.model <- function(features,
                                     median_comparison_threshold,
                                     subtract_median,
                                     model)
+    } else {
+        paras$null_hypothesis <- 0
     }
     
     # Return NULL rather than empty object if fits aren't saved

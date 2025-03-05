@@ -114,12 +114,12 @@ corresponds to the user-set \code{max_signifiance} divided by 10.
     # Read features table
     taxa_table_name <- system.file("extdata", "HMP2_taxonomy.tsv", package =
     "maaslin3")
-    taxa_table <- read.csv(taxa_table_name, sep = '\t')
+    taxa_table <- read.csv(taxa_table_name, sep = '\t', row.names = 1)
     
     # Read metadata table
     metadata_name <- system.file("extdata", "HMP2_metadata.tsv", package =
     "maaslin3")
-    metadata <- read.csv(metadata_name, sep = '\t')
+    metadata <- read.csv(metadata_name, sep = '\t', row.names = 1)
     
     metadata$diagnosis <-
         factor(metadata$diagnosis, levels = c('nonIBD', 'UC', 'CD'))
