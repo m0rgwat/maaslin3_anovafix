@@ -41,26 +41,6 @@ if (identical(environment(), globalenv()) &&
     R_files <- c("fit.R", "utility_scripts.R", "viz.R")
     `%>%` <- dplyr::`%>%`
 
-    # load in the required libraries, report an error if they are not installed
-    # for (lib in c(
-    #     'optparse',
-    #     'logging',
-    #     'data.table',
-    #     'dplyr',
-    #     'pbapply',
-    #     'lmerTest',
-    #     'parallel',
-    #     'lme4',
-    #     'multcomp',
-    #     'ggplot2',
-    #     'viridis',
-    #     "grid",
-    #     'RColorBrewer',
-    #     'patchwork',
-    #     'scales'
-    # )) {
-    #     suppressPackageStartupMessages(require(lib, character.only = TRUE))
-    # }
     for (R_file in R_files)
     {
         if (!(R_file == script_name))
@@ -2154,28 +2134,7 @@ maaslin_fit <- function(filtered_data,
                         correction)
     fit_data_abundance$results <- results[[1]]
     fit_data_prevalence$results <- results[[2]]
-    if (!is.null(fit_data_abundance)) {
-        fit_data_abundance$results <- fit_data_abundance$results %>%
-            dplyr::group_by(.data$name, .data$model) %>%
-            dplyr::mutate(null_hypothesis = 
-                ifelse(median_comparison_abundance & !subtract_median, 
-                    median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
-                    0)) %>%
-            dplyr::ungroup() %>%
-            as.data.frame()
-    }
-    if (!is.null(fit_data_prevalence)) {
-        fit_data_prevalence$results <- fit_data_prevalence$results %>%
-            dplyr::group_by(.data$name, .data$model) %>%
-            dplyr::mutate(null_hypothesis = 
-                ifelse(median_comparison_prevalence & !subtract_median, 
-                    median(.data$coef[!is.na(.data$pval) & .data$pval < 0.95]),
-                    0)) %>%
-            dplyr::ungroup() %>%
-            as.data.frame()
-        
-    }
-    
+
     # Warn about prevalence associations induced by abundances changes
     if (warn_prevalence) {
         logging::loginfo("Re-running abundances for warn_prevalence")
@@ -2238,7 +2197,6 @@ maaslin_fit <- function(filtered_data,
                             fit_data_prevalence,
                             correction)
         new_fit_data_abundance$results <- results[[1]]
-        new_fit_data_abundance$results$null_hypothesis <- 0
 
         results <-
             add_joint_signif(fit_data_abundance,

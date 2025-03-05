@@ -497,18 +497,9 @@ maaslin3_summary_plot <-
         median_df <- merged_results %>%
             dplyr::group_by(.data$full_metadata_name, .data$model) %>%
             dplyr::summarize(median_val = 
-                median(.data$coef[!is.na(.data$pval_individual) & 
-                        .data$pval_individual < 0.95]), 
+                unique(.data$null_hypothesis), 
                 .groups = 'drop')
 
-        if (!median_comparison_abundance) {
-            median_df$median_val[median_df$model == 'Abundance'] <- 0
-        }
-        
-        if (!median_comparison_prevalence) {
-            median_df$median_val[median_df$model == 'Prevalence'] <- 0
-        }
-        
         # Check variables can be plotted
         if (!is.null(coef_plot_vars) | !is.null(heatmap_vars)) {
             if (any(

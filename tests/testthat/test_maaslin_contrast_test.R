@@ -1,5 +1,6 @@
 library(testthat)
 library(maaslin3)
+library(dplyr)
 
 # The idea of these checks is that the contrast test should be the same as
 # refactoring with categorical data
@@ -39,7 +40,7 @@ colnames(contrast_mat) <- c("var1",
                             "var2b",
                             "var2c")
 
-contrast_test_out <- maaslin_contrast_test(results$fit_data_abundance$fits, 
+contrast_test_out <- maaslin_contrast_test(results, 
                       contrast_mat)
 
 metadata$var2 <- factor(metadata$var2, levels = c('b', 'a', 'c'))
@@ -56,20 +57,23 @@ results2 <- maaslin_fit(data_in_tss,
 
 new_mod_results <- results2$fit_data_abundance$results[
     results2$fit_data_abundance$results$value == 'c',]
+new_mod_results <- new_mod_results[order(new_mod_results$pval_individual),]
 
-expect_that(new_mod_results$coef, equals(contrast_test_out$coef))
-expect_that(new_mod_results$stderr, equals(contrast_test_out$stderr))
+expect_that(new_mod_results$coef, equals(contrast_test_out$fit_data_abundance$results$coef))
+expect_that(new_mod_results$stderr, equals(contrast_test_out$fit_data_abundance$results$stderr))
 expect_equal(new_mod_results$pval_individual, 
-            contrast_test_out$pval_individual, tolerance = 0.01)
-
-contrast_test_out2 <- maaslin_contrast_test(results$fit_data_prevalence$fits, 
-                                           contrast_mat)
+             contrast_test_out$fit_data_abundance$results$pval_individual, tolerance = 0.01)
 
 new_mod_results2 <- results2$fit_data_prevalence$results[
     results2$fit_data_prevalence$results$value == 'c',]
+new_mod_results2 <- new_mod_results2[order(new_mod_results2$pval_individual),]
 
-expect_that(new_mod_results2$coef, equals(contrast_test_out2$coef))
-expect_that(new_mod_results2$stderr, equals(contrast_test_out2$stderr))
+contrast_test_out$fit_data_prevalence$results <- 
+    contrast_test_out$fit_data_prevalence$results[
+        order(contrast_test_out$fit_data_prevalence$results$pval_individual),]
+
+expect_that(new_mod_results2$coef, equals(contrast_test_out$fit_data_prevalence$results$coef))
+expect_that(new_mod_results2$stderr, equals(contrast_test_out$fit_data_prevalence$results$stderr))
 expect_equal(new_mod_results2$pval_individual, 
-             contrast_test_out2$pval_individual, tolerance = 0.01)
+             contrast_test_out$fit_data_prevalence$results$pval_individual, tolerance = 0.01)
 

@@ -385,7 +385,299 @@ write_results_in_lefse_format <-
 # Contrast testing #
 ####################
 
-maaslin_contrast_test <- function(fits,
+# add_qvals
+# create_combined_pval
+# flag_abundance_turned_prevalence
+# add_joint_signif
+# append_joint
+# Check for highly significant likely model misfits
+# Warn about prevalence associations induced by abundances changes
+# Small random effects warning
+
+maaslin_contrast_test <- function(
+                        maaslin3_fit,
+                        contrast_mat,
+                        rhs = NULL,
+                        max_significance = 0.1,
+                        correction = 'BH',
+                        median_comparison_abundance = TRUE,
+                        median_comparison_prevalence = FALSE,
+                        subtract_median = FALSE,
+                        small_random_effects = FALSE,
+                        evaluate_only = NULL) {
+    
+    match.arg(correction, correction_choices)
+    
+    # Match variable ignoring case then set correctly as required for p.adjust
+    correction <- correction_choices[match(toupper(correction),
+                                        toupper(correction_choices))]
+    
+    # Run linear model component
+    if (is.null(evaluate_only) || evaluate_only == "abundance") {
+        if (is.null(maaslin3_fit$fit_data_abundance$fits)) {
+            error_message <- paste0(
+                "maaslin3_fit$fit_data_abundance$fits cannot be null,",
+                " check if evaluate_only should be 'prevalence'")
+            stop(error_message)
+        }
+        
+        #######################
+        # For non-zero models #
+        #######################
+        
+        fit_data_abundance <- list()
+        fit_data_abundance$results <- maaslin_contrast_test_runner(
+            maaslin3_fit$fit_data_abundance$fits,
+            contrast_mat,
+            rhs = rhs,
+            median_comparison = median_comparison_abundance)
+
+        #################################################################
+        # Count the total values for each feature (untransformed space) #
+        #################################################################
+        
+        fit_data_abundance$results$N <- as.numeric(plyr::mapvalues(
+            fit_data_abundance$results$feature,
+            maaslin3_fit$fit_data_abundance$results$feature,
+            maaslin3_fit$fit_data_abundance$results$N,
+            warn_missing = FALSE))
+        fit_data_abundance$results$N_not_zero <- as.numeric(plyr::mapvalues(
+            fit_data_abundance$results$feature,
+            maaslin3_fit$fit_data_abundance$results$feature,
+            maaslin3_fit$fit_data_abundance$results$N_not_zero,
+            warn_missing = FALSE))
+    }
+    
+    # Run logistic model component
+    if (is.null(evaluate_only) || evaluate_only == "prevalence") {
+        if (is.null(maaslin3_fit$fit_data_prevalence$fits)) {
+            error_message <- paste0(
+                "maaslin3_fit$fit_data_prevalence$fits cannot be null,",
+                " check if evaluate_only should be 'abundance'")
+            stop(error_message)
+        }
+        
+        #####################
+        # For binary models #
+        #####################
+        
+        fit_data_prevalence <- list()
+        fit_data_prevalence$results <- maaslin_contrast_test_runner(
+            maaslin3_fit$fit_data_prevalence$fits,
+            contrast_mat,
+            rhs = rhs,
+            median_comparison = median_comparison_prevalence)
+        
+        fit_data_prevalence$results$N <- as.numeric(plyr::mapvalues(
+            fit_data_prevalence$results$feature,
+            maaslin3_fit$fit_data_prevalence$results$feature,
+            maaslin3_fit$fit_data_prevalence$results$N,
+            warn_missing = FALSE))
+        fit_data_prevalence$results$N_not_zero <- as.numeric(plyr::mapvalues(
+            fit_data_prevalence$results$feature,
+            maaslin3_fit$fit_data_prevalence$results$feature,
+            maaslin3_fit$fit_data_prevalence$results$N_not_zero, 
+            warn_missing = FALSE))
+    }
+    
+    # Check for highly significant likely model misfits
+    if (is.null(evaluate_only) || evaluate_only == "prevalence") {
+        current_likely_error_subsetter <-
+            !is.na(fit_data_prevalence$results$N_not_zero) &
+            (
+                fit_data_prevalence$results$N_not_zero < 50 &
+                    fit_data_prevalence$results$N_not_zero /
+                    fit_data_prevalence$results$N < 0.05
+            ) &
+            ((
+                !is.na(fit_data_prevalence$results$coef) &
+                    abs(fit_data_prevalence$results$coef) > 15
+            ) |
+                (
+                    !is.na(fit_data_prevalence$results$pval) &
+                        fit_data_prevalence$results$pval < 10 ^ -10
+                )
+            )
+        current_errors_for_likely_issues <-
+            fit_data_prevalence$results$error[current_likely_error_subsetter]
+        fit_data_prevalence$results$error[current_likely_error_subsetter] <-
+            ifelse(
+                !is.na(current_errors_for_likely_issues),
+                current_errors_for_likely_issues,
+                "A large coefficient (>15 in absolute value) or small
+                p-value (< 10^-10) was obtained from a feature present
+                in <5% of samples. Check this is intended."
+            )
+        
+        current_likely_error_subsetter <-
+            !is.na(fit_data_prevalence$results$N_not_zero) &
+            (
+                fit_data_prevalence$results$N -
+                    fit_data_prevalence$results$N_not_zero < 50 &
+                    fit_data_prevalence$results$N_not_zero /
+                    fit_data_prevalence$results$N > 0.95
+            ) &
+            ((
+                !is.na(fit_data_prevalence$results$coef) &
+                    abs(fit_data_prevalence$results$coef) > 15
+            ) |
+                (
+                    !is.na(fit_data_prevalence$results$pval) &
+                        fit_data_prevalence$results$pval < 10 ^ -10
+                )
+            )
+        current_errors_for_likely_issues <-
+            fit_data_prevalence$results$error[current_likely_error_subsetter]
+        fit_data_prevalence$results$error[current_likely_error_subsetter] <-
+            ifelse(
+                !is.na(current_errors_for_likely_issues),
+                current_errors_for_likely_issues,
+                "A large coefficient (>15 in absolute value) or small p-value
+                (< 10^-10) was obtained from a feature present in >95% of
+                samples. Check this is intended."
+            )
+    } else {
+        fit_data_prevalence <- NULL
+    }
+    
+    results <- add_qvals(fit_data_abundance,fit_data_prevalence, correction)
+    fit_data_abundance$results <- results[[1]]
+    fit_data_prevalence$results <- results[[2]]
+    if (!is.null(fit_data_abundance)) {
+        fit_data_abundance$results <- fit_data_abundance$results %>%
+            dplyr::mutate(null_hypothesis = rhs)
+        
+        if (subtract_median & median_comparison_abundance) {
+            fit_data_abundance$results$coef <- 
+                fit_data_abundance$results$coef - 
+                fit_data_abundance$results$null_hypothesis
+            fit_data_abundance$results$null_hypothesis <- 0
+        }
+    }
+    if (!is.null(fit_data_prevalence)) {
+        fit_data_prevalence$results <- fit_data_prevalence$results %>%
+            dplyr::mutate(null_hypothesis = rhs)
+        
+        if (subtract_median & median_comparison_prevalence) {
+            fit_data_prevalence$results$coef <- 
+                fit_data_prevalence$results$coef - 
+                fit_data_prevalence$results$null_hypothesis
+            fit_data_prevalence$results$null_hypothesis <- 0
+        }
+    }
+    
+    # Add in joint p/q-values
+    if (is.null(evaluate_only)) {
+        fit_data_abundance$results <- fit_data_abundance$results %>%
+            dplyr::mutate(metadata = .data$test,
+                value = .data$test,
+                name = .data$test)
+        fit_data_prevalence$results <- fit_data_prevalence$results %>%
+            dplyr::mutate(metadata = .data$test,
+                value = .data$test,
+                name = .data$test)
+        results <-
+            add_joint_signif(fit_data_abundance,
+                            fit_data_prevalence,
+                            NULL,
+                            max_significance,
+                            correction)
+        fit_data_abundance$results <- results[[1]]
+        fit_data_abundance$results <- fit_data_abundance$results %>%
+            dplyr::select(-.data$metadata,
+                    -.data$value,
+                    -.data$name)
+        fit_data_prevalence$results <- results[[2]]
+        fit_data_prevalence$results <- fit_data_prevalence$results %>%
+            dplyr::select(-.data$metadata,
+                    -.data$value,
+                    -.data$name)
+    } else if (evaluate_only == 'abundance') {
+        fit_data_abundance$results$pval_joint <-
+            fit_data_abundance$results$pval
+        fit_data_abundance$results$qval_joint <-
+            fit_data_abundance$results$qval
+        fit_data_abundance$results <- fit_data_abundance$results %>%
+            dplyr::rename(pval_individual = .data$pval,
+                        qval_individual = .data$qval)
+    } else if (evaluate_only == 'prevalence') {
+        fit_data_prevalence$results$pval_joint <-
+            fit_data_prevalence$results$pval
+        fit_data_prevalence$results$qval_joint <-
+            fit_data_prevalence$results$qval
+        fit_data_prevalence$results <-
+            fit_data_prevalence$results %>%
+            dplyr::rename(pval_individual = .data$pval,
+                            qval_individual = .data$qval)
+    }
+    
+    if (!is.null(fit_data_prevalence)) {
+        used_random_effects <- 
+            any(unlist(lapply(maaslin3_fit$fit_data_prevalence$fits, 
+                FUN = function(x){is(x,"glmerMod")})))
+        
+        if (used_random_effects) {
+            if (any(grepl('<4 average observations per random effect', 
+                maaslin3_fit$fit_data_prevalence$results$error))) {
+                fit_data_prevalence$results$error <- 
+                    ifelse(is.na(fit_data_prevalence$results$error),
+                            paste0("<4 average observations per random ",
+                                    "effect group often inflates ",
+                                    "coefficients and deflates p-values: ",
+                                    "consider setting ",
+                                    "small_random_effects=TRUE and see ",
+                                    "tutorial"), 
+                            fit_data_prevalence$results$error)
+            }
+        }
+    }
+    
+    # Set column order
+    col_order <- c("feature", "test", "coef", 
+                    "null_hypothesis", "stderr",
+                    "pval_individual", "qval_individual", "pval_joint",
+                    "qval_joint", "error", "model", "N", "N_not_zero")
+    
+    # Reorder outputs
+    if (is.null(evaluate_only) || evaluate_only == "abundance") {
+        fit_data_abundance$results <-
+            fit_data_abundance$results[
+                order(fit_data_abundance$results$qval_individual), ]
+        # Move all that had errors to the end
+        fit_data_abundance$results <-
+            fit_data_abundance$results[
+                order(!is.na(fit_data_abundance$results$error)), ]
+        
+        # Reorder columns
+        fit_data_abundance$results <- fit_data_abundance$results[,col_order]
+    } else {
+        fit_data_abundance <- NULL
+    }
+    
+    if (is.null(evaluate_only) || evaluate_only == "prevalence") {
+        fit_data_prevalence$results <-
+            fit_data_prevalence$results[
+                order(fit_data_prevalence$results$qval_individual), ]
+        # Move all that had errors to the end
+        fit_data_prevalence$results <-
+            fit_data_prevalence$results[
+                order(!is.na(fit_data_prevalence$results$error)), ]
+        
+        # Reorder columns
+        fit_data_prevalence$results <- fit_data_prevalence$results[,col_order]
+    } else {
+        fit_data_prevalence <- NULL
+    }
+    
+    return(
+        list(
+            "fit_data_abundance" = fit_data_abundance,
+            "fit_data_prevalence" = fit_data_prevalence
+        )
+    )
+}
+
+maaslin_contrast_test_runner <- function(fits,
                                 contrast_mat,
                                 rhs = NULL,
                                 median_comparison = NULL) {
@@ -577,7 +869,7 @@ maaslin_contrast_test <- function(fits,
         coef = test_out_joined$coefs_new,
         rhs = rep(rhs, length(fits)),
         stderr = test_out_joined$sigmas_new,
-        pval_individual = test_out_joined$pvals_new,
+        pval = test_out_joined$pvals_new,
         error = test_out_joined$errors,
         model = model
     )
@@ -597,18 +889,18 @@ maaslin_contrast_test <- function(fits,
             
             # Make sure other p-values are set to NA to not confuse
             # median comparison with non-comparison
-            paras_sub_out$pval_individual <- rep(NA, 
-                length(paras_sub_out$pval_individual))
+            paras_sub_out$pval <- rep(NA, 
+                length(paras_sub_out$pval))
             
-            use_this_coef <- !is.na(paras_sub$pval_individual) & 
-                paras_sub$pval_individual < 0.95
+            use_this_coef <- !is.na(paras_sub$pval) & 
+                paras_sub$pval < 0.95
             
             n_coefs <- nrow(paras_sub)
             sigmas <- paras_sub$stderr
             coefs <- paras_sub$coef
             sigma_sq_med <- var(coefs[use_this_coef], na.rm=TRUE)
             
-            cur_median <- median(coefs)
+            cur_median <- median(coefs[use_this_coef])
             
             # Variance from asymptotic distribution
             sd_median <- sqrt(0.25 * 2 * base::pi * 
@@ -695,14 +987,14 @@ maaslin_contrast_test <- function(fits,
             }, numeric(1))
             
             paras_sub$error <- 
-                ifelse(!is.na(paras_sub$pval_individual) & 
+                ifelse(!is.na(paras_sub$pval) & 
                         is.na(pvals_new),
                     "P-value became NA during median comparison",
                     paras_sub$error
                 )
             
-            paras_sub$pval_individual <- pvals_new
-            paras_sub$rhs <- offsets_to_test
+            paras_sub$pval <- pvals_new
+            paras_sub$rhs <- cur_median
             
             return(rbind(paras_sub, paras_sub_out))
         }))
@@ -891,7 +1183,9 @@ preprocess_taxa_mtx <- function(taxa_table, rna_table, rna_per_taxon) {
     colnames(max_rna_table) <- colnames(rna_table)
 
     dna_table[dna_table == -Inf & max_rna_table > 0] <- impute_val
-    dna_table[dna_table == -Inf & rna_table == 0] <- NA
+    if (any(dna_table == -Inf & rna_table == 0)) {
+        dna_table[dna_table == -Inf & rna_table == 0] <- NA
+    }
     
     return(list("dna_table" = dna_table,
                 "rna_table" = rna_table))
