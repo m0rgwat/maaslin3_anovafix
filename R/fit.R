@@ -1314,6 +1314,10 @@ run_group_models <- function(ranef_function,
                     lme4::fixef(fit)),
                     nrow = length(levels(dat_sub[[group_no_ticks]])[-1])
                 )
+                if (length(which(names(lme4::fixef(fit)) %in% paste0(
+                    group, levels(dat_sub[[group_no_ticks]])[-1]))) == 0) {
+                    stop("group levels not found in fit")
+                }
                 contrast_mat[seq_along(levels(
                 dat_sub[[group_no_ticks]])[-1]),
                 which(names(lme4::fixef(fit)) %in% paste0(
@@ -1345,7 +1349,7 @@ run_group_models <- function(ranef_function,
             return(list(NA, NA, NA, group))
         }, error = function(err) {
             return(list(NA, NA, NA, group))
-        }), names(output$para)))
+        }), names(output$para)), check.names = FALSE)
     })), names(output$para)))
     
     tmp_rownames <- rownames(output$para)
@@ -1558,7 +1562,7 @@ run_ordered_models <- function(ranef_function,
                 ordered_levels
             
             return(tmp_output)
-        }), names(output$para)))
+        }), names(output$para)), check.names = FALSE)
     })), names(output$para)))
     
     return(output)
