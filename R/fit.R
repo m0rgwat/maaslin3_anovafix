@@ -1470,9 +1470,7 @@ run_ordered_models <- function(ranef_function,
                 contrast_vec <- t(matrix(contrast_mat[row_num, ]))
                 tryCatch({
                     summary(multcomp::glht(fit, linfct = contrast_vec, 
-                                        rhs = 0, 
-                                        coef. = function(x) { coef(x, 
-                                        complete = FALSE) }))$test$pvalues
+                                        rhs = 0))$test$pvalues
                 }, error = function(err) { NA })
             }, numeric(1))
                         
@@ -1481,10 +1479,7 @@ run_ordered_models <- function(ranef_function,
                 contrast_vec <- t(matrix(contrast_mat[row_num, ]))
                 tryCatch({
                     summary(multcomp::glht(fit, linfct = contrast_vec, 
-                                        rhs = 0, 
-                                        coef. = function(x) { 
-                                        coef(x, 
-                                        complete = FALSE) }))$test$coefficients
+                                        rhs = 0))$test$coefficients
                 }, error = function(err) { NA })
             }, numeric(1))
                         
@@ -1493,9 +1488,7 @@ run_ordered_models <- function(ranef_function,
                 contrast_vec <- t(matrix(contrast_mat[row_num, ]))
                 tryCatch({
                     summary(multcomp::glht(fit, linfct = contrast_vec, 
-                    rhs = 0, 
-                    coef. = function(x) { 
-                    coef(x, complete = FALSE) }))$test$sigma
+                    rhs = 0))$test$sigma
                 }, error = function(err) { NA })
             }, numeric(1))
                     } else {
