@@ -1967,6 +1967,7 @@ maaslin_fit <- function(filtered_data,
     # Run linear model component
     if (is.null(evaluate_only) || evaluate_only == "abundance") {
         logging::loginfo("Running the linear model component")
+        prevalence_mask <- ifelse(!is.na(filtered_data), 1, 0)
 
         #######################
         # For non-zero models #
@@ -2006,14 +2007,14 @@ maaslin_fit <- function(filtered_data,
                 fit_data_abundance$results,
                 1,
                 FUN = function(x)
-                    length(transformed_data[, x[1]])
+                    length(prevalence_mask[, x[1]])
             )
         fit_data_abundance$results$N_not_zero <-
             apply(
                 fit_data_abundance$results,
                 1,
                 FUN = function(x)
-                    length(which(filtered_data[, x[1]] > zero_threshold))
+                    length(which(prevalence_mask[, x[1]] == 1))
             )
 
     }
@@ -2058,14 +2059,14 @@ maaslin_fit <- function(filtered_data,
                 fit_data_prevalence$results,
                 1,
                 FUN = function(x)
-                    length(transformed_data[, x[1]])
+                    length(prevalence_mask[, x[1]])
             )
         fit_data_prevalence$results$N_not_zero <-
             apply(
                 fit_data_prevalence$results,
                 1,
                 FUN = function(x)
-                    length(which(filtered_data[, x[1]] > zero_threshold))
+                    length(which(prevalence_mask[, x[1]] == 1))
             )
     }
 
