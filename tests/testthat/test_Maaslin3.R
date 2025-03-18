@@ -225,5 +225,22 @@ fit_out <- maaslin3(input_data = taxa_table,
                     cores=1, 
                     verbosity = 'WARN')
 
+expect_error(maaslin3(input_data = taxa_table, 
+    input_metadata = metadata, 
+    output = output_tmp, 
+    normalization = 'TSS', 
+    transform = 'LOG', 
+    formula = '~ diagnosis + `dysbiosis state` + antibiotics + age + reads', 
+    fixed_effects = 'diagnosis',
+    save_models = FALSE, 
+    plot_summary_plot = T, 
+    plot_associations = T, 
+    max_significance = 0.1, 
+    augment = TRUE, 
+    median_comparison_abundance = TRUE, 
+    median_comparison_prevalence = FALSE, 
+    cores=1, 
+    verbosity = 'WARN'))
+
 unlink(output_tmp, recursive = T)
 

@@ -2811,6 +2811,15 @@ maaslin3 <- function(input_data,
             feature_specific_covariate_name
         )
     } else {
+        if (!is.null(fixed_effects) | 
+            !is.null(random_effects) | !is.null(group_effects) | 
+            !is.null(ordered_effects) | !is.null(strata_effects)) {
+            check_null_error <- paste0("random_effects, group_effects, ",
+            "ordered_effects, and strata_effects must be NULL ",
+            "when formula is not NULL")
+            stop(check_null_error)
+        }
+
         formulas <- maaslin_check_formula(data,
                                         metadata,
                                         formula,
