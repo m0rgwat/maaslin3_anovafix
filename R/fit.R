@@ -266,8 +266,8 @@ flag_abundance_turned_prevalence <- function(merged_signif,
                 sign(merged_signif[,'linear_coef']) &
                 abs(merged_signif[,'linear_coef']) > 
                 abs(merged_signif[,'logistic_coef']),
-                "Prevalence association possibly induced 
-by stronger abundance association",
+                paste0("Prevalence association possibly induced ",
+                "by stronger abundance association"),
                 merged_signif[,'logistic_error']
             ),
             merged_signif[,'logistic_error']
