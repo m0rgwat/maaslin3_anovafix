@@ -2517,10 +2517,10 @@ fit.model <- function(features,
     
     env_objects <- ls(environment(func_to_run))
     for (obj in env_objects) {
-        size <- pryr::object_size(get(obj, envir = environment(func_to_run)))
+        size <- utils::object.size(get(obj, envir = environment(func_to_run)))
         logging::logdebug(paste0("Object: ", obj, ", Size: ", size))
     }
-    size <- pryr::object_size(func_to_run)
+    size <- utils::object.size(func_to_run)
     logging::logdebug(paste0("Object: ", "func_to_run", ", Size: ", size))
 
     outputs <-
