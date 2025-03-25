@@ -2261,7 +2261,7 @@ maaslin_fit <- function(filtered_data,
         if (!is.null(random_effects_formula)) {
             bars <- lme4::findbars(random_effects_formula)
             random_names <- vapply(bars, function(x) deparse(x[[3]]), 
-                FUN.VALUE = character(length(bars)))
+                FUN.VALUE = character(1))
             for (random_name in random_names) {
                 random_table <- table(metadata[random_name])
                 random_table <- random_table[random_table > 0]
