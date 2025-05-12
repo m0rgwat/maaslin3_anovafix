@@ -1249,14 +1249,14 @@ run_group_models <- function(ranef_function,
                     # Fixed effects
                     if (model == "logistic") {
                         pval_new <- tryCatch({
-                            anova(fit, test = 'LRT')[group, 'Pr(>Chi)']
+                            car::Anova(fit, test.statistic = 'LR', type = "II")[group, 4]
                         },
                         error = function(err) {
                             NA
                         })
                     } else {
                         pval_new <- tryCatch({
-                            anova(fit)[group, 'Pr(>F)']
+                            car::Anova(fit, type = "II")[group, 4]
                         },
                         error = function(err) {
                             NA
